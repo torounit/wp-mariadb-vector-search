@@ -10,7 +10,7 @@
 
 	<!-- How to scan -->
 	<arg value="sp"/>
-<arg name="parallel" value="8"/>
+	<arg name="parallel" value="8"/>
 	<arg name="extensions" value="php"/>
 
 	<!-- Rules -->
@@ -24,7 +24,7 @@
 	<rule ref="WordPress-Extra"/>
 
 	<!-- PHP version compatibility -->
-	<config name="minimum_supported_wp_version" value="6.7"/>
+	<config name="minimum_supported_wp_version" value=""/>
 	<config name="testVersion" value="8.2-"/>
 
 	<rule ref="PHPCompatibilityWP"/>
