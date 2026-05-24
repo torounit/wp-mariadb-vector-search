@@ -1,0 +1,21 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/wp-env.json",
+	"core": "https://wordpress.org/nightly-builds/wordpress-latest.zip",
+	"testsEnvironment": false,
+	"plugins": [
+		".",
+		"https://downloads.wordpress.org/plugin/ai-provider-for-google.zip",
+		"https://downloads.wordpress.org/plugin/ai-provider-for-openai.zip"
+	],
+	"port": 8889,
+	"config": {
+		"WP_DEBUG": true
+	},
+	"mappings": {
+		"/wp-content/plugins/wp-mariadb-vector-search": "."
+	},
+	"phpVersion": "8.4",
+	"lifecycleScripts": {
+		"afterStart": "wp-env --config=.wp-env.test.json run cli wp rewrite structure /%postname%/ --hard"
+	}
+}

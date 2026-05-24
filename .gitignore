@@ -1,0 +1,19 @@
+# Dependencies
+/vendor/
+/node_modules/
+
+# Build artifacts
+/build/
+
+# IDE
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# WordPress test config
+/wp-tests-config.php
+
+*.cache
