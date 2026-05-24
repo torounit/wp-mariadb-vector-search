@@ -1,24 +1,52 @@
 <?php
 /**
- * PHPUnit bootstrap.
- *
- * For unit tests: requires only the Composer autoloader.
- * For integration tests: also loads WordPress via wp-phpunit when the
- * WP_PHPUNIT__TESTS_CONFIG env variable points to a valid config file
- * (set automatically by wp-env / wp-phpunit).
+ * PHPUnit bootstrap file.
  *
  * @package WP_MariaDB_Vector_Search
  */
 
 declare(strict_types=1);
 
+// Load Composer dependencies.
 require_once dirname( __DIR__, 2 ) . '/vendor/autoload.php';
 
-$wp_phpunit_bootstrap = dirname( __DIR__, 2 ) . '/vendor/wp-phpunit/wp-phpunit/includes/bootstrap.php';
+$_tests_dir = getenv( 'WP_TESTS_DIR' );
 
-if (
-	getenv( 'WP_PHPUNIT__TESTS_CONFIG' ) &&
-	file_exists( $wp_phpunit_bootstrap )
-) {
-	require_once $wp_phpunit_bootstrap;
+if ( ! $_tests_dir ) {
+	$_try_tests_dir = rtrim( sys_get_temp_dir(), '/\\' ) . '/wordpress-tests-lib';
+	if ( file_exists( $_try_tests_dir . '/includes/functions.php' ) ) {
+		$_tests_dir = $_try_tests_dir;
+	}
+	unset( $_try_tests_dir );
 }
+
+if ( ! $_tests_dir ) {
+	$_tests_dir = getenv( 'WP_PHPUNIT__DIR' );
+}
+
+if ( ! $_tests_dir ) {
+	$_try_tests_dir = __DIR__ . '/../../../../../tests/phpunit';
+	if ( file_exists( $_try_tests_dir . '/includes/functions.php' ) ) {
+		$_tests_dir = $_try_tests_dir;
+	}
+}
+
+if ( ! $_tests_dir ) {
+	$_tests_dir = '/tmp/wordpress-tests-lib';
+}
+
+if ( ! file_exists( $_tests_dir . '/includes/functions.php' ) ) {
+	echo "Could not find $_tests_dir/includes/functions.php, have you run bin/install-wp-tests.sh ?" . PHP_EOL; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+	exit( 1 );
+}
+
+require_once $_tests_dir . '/includes/functions.php';
+
+tests_add_filter(
+	'muplugins_loaded',
+	static function (): void {
+		require dirname( __DIR__, 2 ) . '/wp-mariadb-vector-search.php';
+	}
+);
+
+require $_tests_dir . '/includes/bootstrap.php';
