@@ -1,76 +1,74 @@
 # WP MariaDB Vector Search
 
-WordPress の標準 `LIKE` 検索を、MariaDB ネイティブの `VECTOR` 型によるコサイン類似度検索に置き換えるプラグインです。
+Replaces WordPress's default `LIKE`-based search with cosine similarity search powered by MariaDB's native `VECTOR` type.
 
-## 必要環境
+## Requirements
 
-| 依存 | 最低バージョン |
-|------|---------------|
-| WordPress | 7.0+ |
-| PHP | 8.2+ |
-| MariaDB | 11.7+ (VECTOR サポートあり) |
+| Dependency | Minimum version |
+|------------|----------------|
+| WordPress  | 7.0+           |
+| PHP        | 8.2+           |
+| MariaDB    | 11.7+          |
 
-Embedding 生成には **WordPress 7.0 コア AI Connector** を使用します。AI プロバイダーが設定されていない場合、インデックスはスキップされ、標準検索にフォールバックします。
+Embeddings are generated via the **WordPress 7.0 core AI Connector**. If no AI provider is configured, indexing is skipped and search falls back to the standard WordPress LIKE search.
 
-## インストール
+## Installation
 
-1. プラグインを `wp-content/plugins/wp-mariadb-vector-search/` に配置します。
-2. WordPress 管理画面からプラグインを有効化します。  
-   有効化時に `{prefix}mariadb_vector_embeddings` テーブルが自動作成されます。
+1. Place the plugin in `wp-content/plugins/wp-mariadb-vector-search/`.
+2. Activate it from the WordPress admin. The `{prefix}mariadb_vector_embeddings` table is created automatically on activation.
 
-## 使い方
+## Usage
 
-### 自動インデックス
+### Automatic indexing
 
-投稿を公開・更新・削除すると自動でインデックスが更新されます。
+Posts are indexed (or removed from the index) automatically whenever they are published, updated, or deleted.
 
-### 管理画面 (Tools > Vector Search)
+### Admin page (Tools > Vector Search)
 
-- MariaDB の VECTOR サポート状況を確認できます。
-- 現在インデックスされている投稿数を表示します。
-- **Reindex all posts** ボタンで既存投稿を一括再インデックスできます。  
-  `Force reindex` オプションをオンにすると、内容が変更されていない投稿も再 Embedding します。
+- Shows MariaDB VECTOR support status and the number of indexed posts.
+- **Reindex all posts** schedules a background cron job to embed all existing posts.
+- Check **Force reindex** to re-embed posts whose content has not changed.
 
 ### WP-CLI
 
 ```bash
-# 全投稿を再インデックス
+# Reindex all posts
 wp mariadb-vector reindex
 
-# 特定の投稿タイプのみ
+# Limit to a specific post type
 wp mariadb-vector reindex --post-type=post
 
-# 内容が変わっていない投稿も強制再 Embedding
+# Re-embed even posts whose content has not changed
 wp mariadb-vector reindex --force
 
-# バッチサイズを指定 (デフォルト: 50)
+# Set the batch size (default: 50)
 wp mariadb-vector reindex --batch=100
 ```
 
-## 設定
+## Configuration
 
-`wp_mariadb_vector_search_settings` オプション (配列) で以下を変更できます。
+Stored in the `wp_mariadb_vector_search_settings` option (array).
 
-| キー | デフォルト | 説明 |
-|-----|-----------|------|
-| `dimensions` | 1536 | ベクトルの次元数。インストール時に固定。モデル変更時はテーブルを再作成してください。 |
-| `top_k` | 20 | 検索で返す投稿数。 |
-| `chunk_overscan` | 5 | 内部クエリの LIMIT 倍率 (`top_k × overscan`)。 |
-| `chunk_size_chars` | 2000 | チャンクの目標文字数。 |
-| `chunk_overlap_chars` | 300 | 隣接チャンクのオーバーラップ文字数。 |
+| Key                  | Default | Description |
+|----------------------|---------|-------------|
+| `dimensions`         | 1536    | Vector dimensions. Fixed at install time; changing the model requires dropping and re-creating the table. |
+| `top_k`              | 20      | Number of posts returned by a vector search. |
+| `chunk_overscan`     | 5       | Inner query `LIMIT` multiplier (`top_k × overscan`). |
+| `chunk_size_chars`   | 2000    | Target chunk size in characters. |
+| `chunk_overlap_chars`| 300     | Overlap between adjacent chunks in characters. |
 
-## フィルター / アクション
+## Filters
 
 ### `wp_mariadb_vector_search_embed`
 
-Embedding プロバイダーを差し替えます。
+Replace the embedding provider.
 
 ```php
 add_filter(
     'wp_mariadb_vector_search_embed',
     function ( $default, array $texts ): array {
-        // $texts: string[] — Embedding したいテキストの配列
-        // 返り値: float[][] — 各テキストに対応するベクトルの配列
+        // $texts   — string[] of texts to embed
+        // return   — float[][] one vector per input text
         return my_embedding_provider( $texts );
     },
     10,
@@ -80,7 +78,7 @@ add_filter(
 
 ### `wp_mariadb_vector_search_post_types`
 
-インデックス・検索対象の投稿タイプを制御します。
+Control which post types are indexed and searched.
 
 ```php
 add_filter(
@@ -91,36 +89,35 @@ add_filter(
 );
 ```
 
-## アンインストール
+## Uninstall
 
-プラグインを削除すると `uninstall.php` が実行され、テーブルと関連オプションが削除されます。
+Deleting the plugin runs `uninstall.php`, which drops the embeddings table and removes all related options.
 
-## 開発
+## Development
 
-### テスト
+### Running tests
 
 ```bash
-# 依存インストール
 npm install
 composer install
 
-# wp-env を使ってテスト実行 (MariaDB 11.7+ が起動します)
+# Start wp-env (MariaDB 11.7+) and run PHPUnit
 npm run test:php
 ```
 
-### ファイル構成
+### File structure
 
 ```
 includes/
-  Admin.php            — 管理画面ページ
-  Chunker.php          — テキストチャンキング
-  CLI.php              — WP-CLI コマンド
-  Content_Hash.php     — 投稿内容の SHA-256 ハッシュ
-  Cron_Backfill.php    — Cron による一括再インデックス
-  Embedding_Client.php — AI Connector ラッパー
-  Indexer.php          — 投稿の Embedding → 保存パイプライン
-  Repository.php       — $wpdb ラッパー (ベクトル CRUD + KNN)
-  Schema.php           — テーブル DDL 管理
-  Search.php           — pre_get_posts フック (ベクトル検索への書き換え)
-  class-plugin.php     — プラグインライフサイクル・フック登録
+  Admin.php            — Tools > Vector Search admin page
+  Chunker.php          — HTML-strip + paragraph/sentence chunking with overlap
+  CLI.php              — WP-CLI reindex command
+  Content_Hash.php     — SHA-256 hash of post title + content
+  Cron_Backfill.php    — Batched cron-driven backfill for existing posts
+  Embedding_Client.php — Thin wrapper over the WP AI Connector
+  Indexer.php          — chunk → embed → store pipeline
+  Plugin.php           — Plugin lifecycle and hook registration
+  Repository.php       — $wpdb wrapper: vector CRUD and KNN queries
+  Schema.php           — DDL management (CREATE / DROP / version check)
+  Search.php           — pre_get_posts hook: rewrites search to vector KNN
 ```
