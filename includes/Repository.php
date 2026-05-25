@@ -30,7 +30,7 @@ class Repository {
 			throw new \InvalidArgumentException( 'Vector must not be empty.' );
 		}
 
-		$parts = [];
+		$parts = array();
 		foreach ( $vector as $value ) {
 			$f = (float) $value;
 			if ( is_nan( $f ) || is_infinite( $f ) ) {
@@ -40,10 +40,153 @@ class Repository {
 			}
 			// number_format always uses '.' as the decimal separator (locale-safe).
 			// 10 decimal places covers float32 precision for values in [-1, 1].
-			$str    = number_format( $f, 10, '.', '' );
+			$str     = number_format( $f, 10, '.', '' );
 			$parts[] = rtrim( rtrim( $str, '0' ), '.' );
 		}
 
 		return '[' . implode( ',', $parts ) . ']';
+	}
+
+	// -----------------------------------------------------------------------
+	// Write operations
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Insert or replace all chunks for a post atomically.
+	 *
+	 * Deletes any existing rows for $post_id first so that stale chunks from
+	 * a prior version of the post are never left behind.
+	 *
+	 * @param int    $post_id   Post ID.
+	 * @param string $post_type Post type slug.
+	 * @param string $hash      Content hash (sha256 of title+body).
+	 * @param string $model     Embedding model identifier.
+	 * @param array  $chunks    Array of chunk data. Each element must have:
+	 *                          'chunk_index' (int), 'chunk_text' (string),
+	 *                          'vector' (float[]).
+	 * @return void
+	 */
+	public function replace_post_chunks(
+		int $post_id,
+		string $post_type,
+		string $hash,
+		string $model,
+		array $chunks
+	): void {
+		global $wpdb;
+		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
+		$now   = current_time( 'mysql', true );
+		$dims  = count( $chunks[0]['vector'] );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( $wpdb->prepare( "DELETE FROM `{$table}` WHERE post_id = %d", $post_id ) );
+
+		foreach ( $chunks as $chunk ) {
+			$vec_literal = self::format_vector_literal( $chunk['vector'] );
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->query(
+				$wpdb->prepare(
+					"INSERT INTO `{$table}`
+					(post_id, chunk_index, post_type, model, dimensions, embedding, chunk_text, content_hash, updated_at)
+					VALUES (%d, %d, %s, %s, %d, VEC_FromText(%s), %s, %s, %s)",
+					$post_id,
+					$chunk['chunk_index'],
+					$post_type,
+					$model,
+					$dims,
+					$vec_literal,
+					$chunk['chunk_text'],
+					$hash,
+					$now
+				)
+			);
+			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
+	}
+
+	/**
+	 * Remove all embedding rows for a post.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return void
+	 */
+	public function delete_post( int $post_id ): void {
+		global $wpdb;
+		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( $wpdb->prepare( "DELETE FROM `{$table}` WHERE post_id = %d", $post_id ) );
+	}
+
+	/**
+	 * Return the stored content hash for a post, or null if not indexed.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return string|null
+	 */
+	public function get_content_hash( int $post_id ): ?string {
+		global $wpdb;
+		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$result = $wpdb->get_var(
+			$wpdb->prepare( "SELECT content_hash FROM `{$table}` WHERE post_id = %d LIMIT 1", $post_id )
+		);
+		return is_string( $result ) ? $result : null;
+	}
+
+	// -----------------------------------------------------------------------
+	// Read operations
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Return the top-K most similar post IDs for a query vector.
+	 *
+	 * Uses a two-step approach so the VECTOR INDEX is used by the inner query
+	 * (ORDER BY distance LIMIT overscan), then PHP aggregates per post.
+	 *
+	 * @param float[]  $query_vector Embedding of the search query.
+	 * @param int      $k            Number of posts to return.
+	 * @param string[] $post_types   Post types to include.
+	 * @param int      $overscan     Inner LIMIT multiplier (default 5).
+	 * @return int[]  Post IDs ordered by ascending cosine distance.
+	 */
+	public function knn( array $query_vector, int $k, array $post_types, int $overscan = 5 ): array {
+		global $wpdb;
+		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
+
+		$vec_literal    = self::format_vector_literal( $query_vector );
+		$inner_limit    = $k * $overscan;
+		$type_list      = implode( ',', array_map( static fn( $t ) => "'" . esc_sql( $t ) . "'", $post_types ) );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT post_id, VEC_DISTANCE_COSINE(embedding, VEC_FromText(%s)) AS d
+				FROM `{$table}`
+				WHERE post_type IN ({$type_list})
+				ORDER BY d ASC
+				LIMIT %d",
+				$vec_literal,
+				$inner_limit
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		if ( empty( $rows ) ) {
+			return array();
+		}
+
+		// Aggregate by post_id keeping the minimum distance (best chunk wins).
+		$min_by_post = array();
+		foreach ( $rows as $row ) {
+			$pid = (int) $row->post_id;
+			$d   = (float) $row->d;
+			if ( ! isset( $min_by_post[ $pid ] ) || $d < $min_by_post[ $pid ] ) {
+				$min_by_post[ $pid ] = $d;
+			}
+		}
+
+		asort( $min_by_post );
+		$ids = array_keys( array_slice( $min_by_post, 0, $k, true ) );
+		return array_map( 'intval', $ids );
 	}
 }
