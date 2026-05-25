@@ -28,7 +28,7 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 	require_once __DIR__ . '/vendor/autoload.php';
 }
 
-require_once __DIR__ . '/includes/class-plugin.php';
+require_once __DIR__ . '/includes/Plugin.php';
 
 register_activation_hook( __FILE__, array( 'WP_MariaDB_Vector_Search\\Plugin', 'activate' ) );
 register_deactivation_hook( __FILE__, array( 'WP_MariaDB_Vector_Search\\Plugin', 'deactivate' ) );
