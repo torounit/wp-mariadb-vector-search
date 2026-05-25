@@ -138,6 +138,18 @@ class Repository {
 	// -----------------------------------------------------------------------
 
 	/**
+	 * Return the number of distinct posts that have at least one indexed chunk.
+	 *
+	 * @return int
+	 */
+	public function count_indexed(): int {
+		global $wpdb;
+		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (int) $wpdb->get_var( "SELECT COUNT(DISTINCT post_id) FROM `{$table}`" );
+	}
+
+	/**
 	 * Return the top-K most similar post IDs for a query vector.
 	 *
 	 * Uses a two-step approach so the VECTOR INDEX is used by the inner query

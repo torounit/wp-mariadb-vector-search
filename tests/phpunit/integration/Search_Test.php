@@ -84,12 +84,12 @@ class Search_Test extends \WP_UnitTestCase {
 
 		$this->restore_main_query();
 
-		Schema::drop();
-		delete_option( 'wp_mariadb_vector_search_db_version' );
-
-		// Clean up posts created without temp tables.
+		// Delete posts before dropping schema so delete_post hooks don't error.
 		wp_delete_post( $this->post_a, true );
 		wp_delete_post( $this->post_b, true );
+
+		Schema::drop();
+		delete_option( 'wp_mariadb_vector_search_db_version' );
 
 		add_filter( 'query', array( $this, '_create_temporary_tables' ) );
 		add_filter( 'query', array( $this, '_drop_temporary_tables' ) );

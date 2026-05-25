@@ -4,8 +4,8 @@
  * Plugin URI:        https://github.com/torounit/wp-mariadb-vector-search
  * Description:       Base scaffold for a MariaDB vector search WordPress plugin.
  * Version:           0.1.0
- * Requires at least: 6.5
- * Requires PHP:      8.1
+ * Requires at least: 7.0
+ * Requires PHP:      8.2
  * Author:            Toro_Unit
  * Author URI:        https://torounit.com
  * License:           GPL-2.0-or-later
