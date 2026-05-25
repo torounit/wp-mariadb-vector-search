@@ -40,6 +40,8 @@ class Plugin {
 			return;
 		}
 
+		$this->maybe_install_schema();
+
 		$repository = new Repository();
 		$client     = new Embedding_Client();
 		$indexer    = new Indexer( $client, $repository );
@@ -70,6 +72,24 @@ class Plugin {
 		echo '<div class="notice notice-error"><p>';
 		echo esc_html__( 'WP MariaDB Vector Search requires MariaDB 11.7 or higher with VECTOR support.', 'wp-mariadb-vector-search' );
 		echo '</p></div>';
+	}
+
+	/**
+	 * Install the schema if not yet installed or outdated.
+	 *
+	 * Called on every plugins_loaded so the table is always present
+	 * regardless of whether the activation hook ran (e.g. manual installs).
+	 *
+	 * @return void
+	 */
+	private function maybe_install_schema(): void {
+		if ( get_option( Schema::DB_VERSION_OPTION ) === Schema::DB_VERSION ) {
+			return;
+		}
+
+		$settings   = get_option( 'wp_mariadb_vector_search_settings', array() );
+		$dimensions = isset( $settings['dimensions'] ) ? (int) $settings['dimensions'] : self::DEFAULT_DIMENSIONS;
+		Schema::install( $dimensions );
 	}
 
 	/**
