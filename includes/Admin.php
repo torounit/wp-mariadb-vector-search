@@ -82,9 +82,10 @@ class Admin {
 	 * @return void
 	 */
 	public function render_page(): void {
-		$is_supported = Schema::is_vector_supported();
-		$progress     = $this->backfill->get_progress();
-		$indexed      = $is_supported ? $this->repository->count_indexed() : 0;
+		$is_supported   = Schema::is_vector_supported();
+		$schema_ready   = $is_supported && Schema::is_installed();
+		$progress       = $this->backfill->get_progress();
+		$indexed        = $schema_ready ? $this->repository->count_indexed() : 0;
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'MariaDB Vector Search', 'wp-mariadb-vector-search' ); ?></h1>
@@ -134,7 +135,7 @@ class Admin {
 				</tbody>
 			</table>
 
-			<?php if ( $is_supported ) : ?>
+			<?php if ( $schema_ready ) : ?>
 				<h2><?php esc_html_e( 'Reindex', 'wp-mariadb-vector-search' ); ?></h2>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<input type="hidden" name="action" value="<?php echo esc_attr( self::ACTION_KEY ); ?>">

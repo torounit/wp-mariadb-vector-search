@@ -39,7 +39,7 @@ class Schema {
 		}
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->query(
+		$result = $wpdb->query(
 			"CREATE TABLE IF NOT EXISTS `{$table}` (
 				`id`           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 				`post_id`      BIGINT UNSIGNED NOT NULL,
@@ -58,7 +58,18 @@ class Schema {
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-		update_option( self::DB_VERSION_OPTION, self::DB_VERSION );
+		if ( false !== $result ) {
+			update_option( self::DB_VERSION_OPTION, self::DB_VERSION );
+		}
+	}
+
+	/**
+	 * Return true if the embeddings table has been successfully created.
+	 *
+	 * @return bool
+	 */
+	public static function is_installed(): bool {
+		return get_option( self::DB_VERSION_OPTION ) === self::DB_VERSION;
 	}
 
 	/**
