@@ -31,8 +31,9 @@ class Schema {
 	public static function install( int $dimensions ): void {
 		global $wpdb;
 
-		$table        = $wpdb->prefix . 'mariadb_vector_embeddings';
-		$current_ver  = get_option( self::DB_VERSION_OPTION, '' );
+		$table           = $wpdb->prefix . 'mariadb_vector_embeddings';
+		$charset_collate = $wpdb->get_charset_collate();
+		$current_ver     = get_option( self::DB_VERSION_OPTION, '' );
 
 		if ( $current_ver === self::DB_VERSION ) {
 			return;
@@ -54,7 +55,7 @@ class Schema {
 				UNIQUE KEY `post_chunk` (`post_id`, `chunk_index`),
 				KEY `post_type_idx` (`post_type`),
 				VECTOR INDEX (`embedding`) DISTANCE=cosine
-			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+			) ENGINE=InnoDB {$charset_collate}"
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
