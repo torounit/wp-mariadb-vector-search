@@ -24,6 +24,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 define( 'WP_MARIADB_VECTOR_SEARCH_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WP_MARIADB_VECTOR_SEARCH_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
+if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
+	require_once __DIR__ . '/vendor/autoload.php';
+}
+
 require_once __DIR__ . '/includes/class-plugin.php';
 
 register_activation_hook( __FILE__, array( 'WP_MariaDB_Vector_Search\\Plugin', 'activate' ) );
