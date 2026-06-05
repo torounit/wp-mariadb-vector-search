@@ -17,6 +17,7 @@ use WordPress\AiClient\Providers\Http\Contracts\HttpTransporterInterface;
 use WordPress\AiClient\Providers\Http\Contracts\RequestAuthenticationInterface;
 use WordPress\AiClient\Providers\Http\DTO\Request;
 use WordPress\AiClient\Providers\Http\Enums\HttpMethodEnum;
+use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiProvider;
 use WordPress\AiClient\Providers\Http\HttpTransporterFactory;
 use WordPress\AiClient\Providers\Http\Util\ResponseUtil;
 use WordPress\AiClient\Providers\Models\DTO\ModelRequirements;
@@ -200,21 +201,22 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 	 */
 	private function build_request( array $texts, string $provider, string $model ): Request {
 		return ( 'google' === $provider )
-			? $this->build_google_request( $texts, $model )
-			: $this->build_openai_request( $texts, $model );
+			? $this->build_google_request( $texts, $provider, $model )
+			: $this->build_openai_request( $texts, $provider, $model );
 	}
 
 	/**
 	 * Build an OpenAI /v1/embeddings request.
 	 *
-	 * @param string[] $texts Texts to embed.
-	 * @param string   $model Model name.
+	 * @param string[] $texts    Texts to embed.
+	 * @param string   $provider Provider id.
+	 * @param string   $model    Model name.
 	 * @return Request
 	 */
-	private function build_openai_request( array $texts, string $model ): Request {
+	private function build_openai_request( array $texts, string $provider, string $model ): Request {
 		return new Request(
 			HttpMethodEnum::POST(),
-			'https://api.openai.com/v1/embeddings',
+			$this->resolve_url( $provider, 'embeddings', 'https://api.openai.com/v1/embeddings' ),
 			array( 'Content-Type' => 'application/json' ),
 			(string) wp_json_encode(
 				array(
@@ -228,11 +230,12 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 	/**
 	 * Build a Google Generative AI batchEmbedContents request.
 	 *
-	 * @param string[] $texts Texts to embed.
-	 * @param string   $model Model name.
+	 * @param string[] $texts    Texts to embed.
+	 * @param string   $provider Provider id.
+	 * @param string   $model    Model name.
 	 * @return Request
 	 */
-	private function build_google_request( array $texts, string $model ): Request {
+	private function build_google_request( array $texts, string $provider, string $model ): Request {
 		$requests = array_map(
 			static fn( string $text ) => array(
 				'model'   => 'models/' . $model,
@@ -243,10 +246,42 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 
 		return new Request(
 			HttpMethodEnum::POST(),
-			'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':batchEmbedContents',
+			$this->resolve_url(
+				$provider,
+				'models/' . $model . ':batchEmbedContents',
+				'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':batchEmbedContents'
+			),
 			array( 'Content-Type' => 'application/json' ),
 			(string) wp_json_encode( array( 'requests' => $requests ) )
 		);
+	}
+
+	/**
+	 * Resolve the endpoint URL for a provider.
+	 *
+	 * If the provider class extends AbstractApiProvider, uses its url() method so
+	 * that OpenAI-compatible providers (Azure, local LLMs, AI gateways, etc.) can
+	 * supply their own base URL without hard-coding it here.
+	 * Falls back to $fallback when the provider is not registered or does not
+	 * extend AbstractApiProvider.
+	 *
+	 * @param string $provider Provider id.
+	 * @param string $path     Endpoint path to append to the base URL.
+	 * @param string $fallback Hard-coded URL used when the provider class is unknown.
+	 * @return string Full endpoint URL.
+	 */
+	private function resolve_url( string $provider, string $path, string $fallback ): string {
+		try {
+			$class = $this->registry->getProviderClassName( $provider );
+		} catch ( \Throwable ) {
+			$class = '';
+		}
+
+		if ( '' !== $class && is_subclass_of( $class, AbstractApiProvider::class ) ) {
+			return $class::url( $path );
+		}
+
+		return $fallback;
 	}
 
 	/**

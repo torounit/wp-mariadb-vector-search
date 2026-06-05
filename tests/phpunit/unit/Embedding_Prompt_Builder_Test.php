@@ -42,11 +42,12 @@ class Embedding_Prompt_Builder_Test extends \WP_UnitTestCase {
 	/**
 	 * Create a ProviderRegistry mock returning one provider/model pair.
 	 *
-	 * @param string $provider_id Provider id string.
-	 * @param string $model_id    Model id string.
+	 * @param string $provider_id         Provider id string.
+	 * @param string $model_id            Model id string.
+	 * @param string $provider_class_name Optional class name returned by getProviderClassName().
 	 * @return ProviderRegistry&\PHPUnit\Framework\MockObject\MockObject
 	 */
-	private function make_registry( string $provider_id, string $model_id ): ProviderRegistry {
+	private function make_registry( string $provider_id, string $model_id, string $provider_class_name = '' ): ProviderRegistry {
 		$provider_metadata = new ProviderMetadata( $provider_id, $provider_id, ProviderTypeEnum::cloud() );
 		$model_metadata    = new ModelMetadata(
 			$model_id,
@@ -59,27 +60,33 @@ class Embedding_Prompt_Builder_Test extends \WP_UnitTestCase {
 		$registry = $this->createMock( ProviderRegistry::class );
 		$registry->method( 'findModelsMetadataForSupport' )->willReturn( array( $pmc ) );
 
+		if ( '' !== $provider_class_name ) {
+			$registry->method( 'getProviderClassName' )->willReturn( $provider_class_name );
+		}
+
 		return $registry;
 	}
 
 	/**
 	 * Create an Embedding_Prompt_Builder with injected transport, auth, and registry.
 	 *
-	 * @param HttpTransporterInterface $transport   Mock transporter.
-	 * @param string                   $provider_id Provider id.
-	 * @param string                   $model_id    Model id.
+	 * @param HttpTransporterInterface $transport          Mock transporter.
+	 * @param string                   $provider_id        Provider id.
+	 * @param string                   $model_id           Model id.
+	 * @param string                   $provider_class_name Optional class returned by getProviderClassName().
 	 * @return Embedding_Prompt_Builder
 	 */
 	private function make_builder(
 		HttpTransporterInterface $transport,
 		string $provider_id = 'openai',
-		string $model_id = 'text-embedding-3-small'
+		string $model_id = 'text-embedding-3-small',
+		string $provider_class_name = ''
 	): Embedding_Prompt_Builder {
 		return new Embedding_Prompt_Builder(
 			null,
 			$transport,
 			$this->make_auth(),
-			$this->make_registry( $provider_id, $model_id )
+			$this->make_registry( $provider_id, $model_id, $provider_class_name )
 		);
 	}
 
@@ -236,6 +243,74 @@ class Embedding_Prompt_Builder_Test extends \WP_UnitTestCase {
 
 		$this->make_builder( $transport, 'google', 'text-embedding-004' )
 			->generate_embeddings_result( array( 'test' ) );
+	}
+
+	// -----------------------------------------------------------------------
+	// resolve_url — provider class drives the endpoint URL
+	// -----------------------------------------------------------------------
+
+	/**
+	 * When the registry returns an AbstractApiProvider subclass, the request URL
+	 * is built from that class's url() rather than the hard-coded fallback.
+	 */
+	public function test_openai_url_uses_provider_base_url_when_class_registered(): void {
+		$payload  = (string) wp_json_encode( array( 'data' => array( array( 'embedding' => array( 0.1 ) ) ) ) );
+		$response = new Response( 200, array(), $payload );
+
+		$captured_url = null;
+		$transport    = $this->createMock( HttpTransporterInterface::class );
+		$transport->expects( $this->once() )
+			->method( 'send' )
+			->with(
+				$this->callback(
+					static function ( Request $req ) use ( &$captured_url ): bool {
+						$captured_url = $req->getUri();
+						return true;
+					}
+				)
+			)
+			->willReturn( $response );
+
+		$this->make_builder(
+			$transport,
+			'custom',
+			'text-embedding-3-small',
+			Stub_Api_Provider::class
+		)->generate_embeddings_result( array( 'test' ) );
+
+		$this->assertSame( 'https://custom.example.com/v1/embeddings', $captured_url );
+	}
+
+	/**
+	 * When the registry throws (provider not registered), the hard-coded fallback URL is used.
+	 */
+	public function test_openai_url_falls_back_when_provider_class_not_registered(): void {
+		$payload  = (string) wp_json_encode( array( 'data' => array( array( 'embedding' => array( 0.1 ) ) ) ) );
+		$response = new Response( 200, array(), $payload );
+
+		$captured_url = null;
+		$transport    = $this->createMock( HttpTransporterInterface::class );
+		$transport->expects( $this->once() )
+			->method( 'send' )
+			->with(
+				$this->callback(
+					static function ( Request $req ) use ( &$captured_url ): bool {
+						$captured_url = $req->getUri();
+						return true;
+					}
+				)
+			)
+			->willReturn( $response );
+
+		// Registry throws on getProviderClassName — simulates an unregistered provider.
+		$registry = $this->make_registry( 'openai', 'text-embedding-3-small' );
+		$registry->method( 'getProviderClassName' )
+			->willThrowException( new \InvalidArgumentException( 'Provider not registered' ) );
+
+		$builder = new Embedding_Prompt_Builder( null, $transport, $this->make_auth(), $registry );
+		$builder->generate_embeddings_result( array( 'test' ) );
+
+		$this->assertSame( 'https://api.openai.com/v1/embeddings', $captured_url );
 	}
 
 	// -----------------------------------------------------------------------
