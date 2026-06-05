@@ -18,6 +18,8 @@ namespace WP_MariaDB_Vector_Search;
 class Chunker {
 
 	/**
+	 * Constructor.
+	 *
 	 * @param int $chunk_size  Target body length per chunk in characters (default 2000).
 	 * @param int $overlap     How many characters of the previous chunk to repeat at the
 	 *                         start of the next one (default 300).
@@ -38,7 +40,7 @@ class Chunker {
 		$body = wp_strip_all_tags( $body );
 		$body = trim( $body );
 
-		if ( $body === '' ) {
+		if ( '' === $body ) {
 			return array( $title );
 		}
 
@@ -81,7 +83,7 @@ class Chunker {
 		}
 
 		return array_values(
-			array_filter( $chunks, static fn( string $c ): bool => $c !== '' )
+			array_filter( $chunks, static fn( string $c ): bool => '' !== $c )
 		);
 	}
 
@@ -101,22 +103,22 @@ class Chunker {
 		$search_region = mb_substr( $text, $search_from, $max_end - $search_from );
 
 		$pos = mb_strrpos( $search_region, "\n\n" );
-		if ( $pos !== false ) {
+		if ( false !== $pos ) {
 			return $search_from + $pos + 2;
 		}
 
 		$pos = mb_strrpos( $search_region, '。' ); // Japanese full stop.
-		if ( $pos !== false ) {
+		if ( false !== $pos ) {
 			return $search_from + $pos + 1;
 		}
 
 		$pos = mb_strrpos( $search_region, '. ' );
-		if ( $pos !== false ) {
+		if ( false !== $pos ) {
 			return $search_from + $pos + 2;
 		}
 
 		$pos = mb_strrpos( $search_region, ' ' );
-		if ( $pos !== false ) {
+		if ( false !== $pos ) {
 			return $search_from + $pos + 1;
 		}
 

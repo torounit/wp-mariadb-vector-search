@@ -21,6 +21,8 @@ class Indexer {
 	private const MODEL = 'wp-ai-connector';
 
 	/**
+	 * Constructor.
+	 *
 	 * @param Embedding_Client $client     Embedding provider wrapper.
 	 * @param Repository       $repository Embeddings table wrapper.
 	 * @param Chunker          $chunker    Text splitter.

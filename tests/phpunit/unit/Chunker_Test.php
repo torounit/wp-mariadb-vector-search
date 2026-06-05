@@ -16,8 +16,16 @@ use WP_MariaDB_Vector_Search\Chunker;
  */
 class Chunker_Test extends \WP_UnitTestCase {
 
+	/**
+	 * Chunker instance under test.
+	 *
+	 * @var Chunker
+	 */
 	private Chunker $chunker;
 
+	/**
+	 * Set up test fixtures.
+	 */
 	public function set_up(): void {
 		parent::set_up();
 		$this->chunker = new Chunker( 2000, 300 );
@@ -125,6 +133,7 @@ class Chunker_Test extends \WP_UnitTestCase {
 	 *
 	 * @param int $paragraphs Number of paragraphs.
 	 * @param int $words      Words per paragraph.
+	 * @return string
 	 */
 	private function make_paragraphs( int $paragraphs, int $words ): string {
 		$word = 'word';

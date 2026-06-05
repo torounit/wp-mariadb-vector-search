@@ -17,6 +17,8 @@ namespace WP_MariaDB_Vector_Search;
 class CLI {
 
 	/**
+	 * Constructor.
+	 *
 	 * @param Indexer $indexer Embedding + storage pipeline.
 	 */
 	public function __construct( private Indexer $indexer ) {}
@@ -84,6 +86,8 @@ class CLI {
 				)
 			);
 
+			$fetched = count( $ids );
+
 			foreach ( $ids as $post_id ) {
 				if ( $force ) {
 					$this->indexer->delete_post( $post_id );
@@ -94,7 +98,7 @@ class CLI {
 			}
 
 			$offset += $batch;
-		} while ( count( $ids ) === $batch );
+		} while ( $batch === $fetched );
 
 		$progress->finish();
 		\WP_CLI::success( sprintf( 'Done. Processed %d posts.', $count ) );

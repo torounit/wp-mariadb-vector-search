@@ -22,10 +22,28 @@ use WP_MariaDB_Vector_Search\Schema;
  */
 class Indexer_Test extends \WP_UnitTestCase {
 
+	/**
+	 * Indexer instance under test.
+	 *
+	 * @var Indexer
+	 */
 	private Indexer $indexer;
+
+	/**
+	 * Repository instance.
+	 *
+	 * @var Repository
+	 */
 	private Repository $repository;
+
+	/**
+	 * Number of vector dimensions used in this test suite.
+	 */
 	private const DIMS = 4;
 
+	/**
+	 * Set up test fixtures.
+	 */
 	public function set_up(): void {
 		parent::set_up();
 
@@ -55,6 +73,9 @@ class Indexer_Test extends \WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * Tear down test fixtures.
+	 */
 	public function tear_down(): void {
 		remove_all_filters( 'wp_mariadb_vector_search_embed' );
 		Schema::drop();
@@ -64,6 +85,7 @@ class Indexer_Test extends \WP_UnitTestCase {
 		parent::tear_down();
 	}
 
+	/** Chunks are stored after index_post(). */
 	public function test_index_post_stores_chunks(): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
@@ -78,13 +100,15 @@ class Indexer_Test extends \WP_UnitTestCase {
 
 		$this->indexer->index_post( $post_id );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$count = (int) $wpdb->get_var(
 			$wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE post_id = %d", $post_id )
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$this->assertGreaterThan( 0, $count );
 	}
 
+	/** A post with unchanged content is not re-indexed. */
 	public function test_index_post_skips_unchanged_content(): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
@@ -99,23 +123,26 @@ class Indexer_Test extends \WP_UnitTestCase {
 
 		$this->indexer->index_post( $post_id );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$first_updated = $wpdb->get_var(
 			$wpdb->prepare( "SELECT updated_at FROM `{$table}` WHERE post_id = %d LIMIT 1", $post_id )
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		// A tiny sleep ensures the timestamp would differ if re-indexed.
 		sleep( 1 );
 		$this->indexer->index_post( $post_id );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$second_updated = $wpdb->get_var(
 			$wpdb->prepare( "SELECT updated_at FROM `{$table}` WHERE post_id = %d LIMIT 1", $post_id )
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$this->assertSame( $first_updated, $second_updated );
 	}
 
+	/** A post with changed content is re-indexed with a new hash. */
 	public function test_index_post_reindexes_changed_content(): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
@@ -130,10 +157,11 @@ class Indexer_Test extends \WP_UnitTestCase {
 
 		$this->indexer->index_post( $post_id );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$old_hash = $wpdb->get_var(
 			$wpdb->prepare( "SELECT content_hash FROM `{$table}` WHERE post_id = %d LIMIT 1", $post_id )
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		wp_update_post(
 			array(
@@ -144,14 +172,16 @@ class Indexer_Test extends \WP_UnitTestCase {
 
 		$this->indexer->index_post( $post_id );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$new_hash = $wpdb->get_var(
 			$wpdb->prepare( "SELECT content_hash FROM `{$table}` WHERE post_id = %d LIMIT 1", $post_id )
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$this->assertNotSame( $old_hash, $new_hash );
 	}
 
+	/** All rows are removed after delete_post(). */
 	public function test_delete_post_removes_rows(): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
@@ -167,13 +197,15 @@ class Indexer_Test extends \WP_UnitTestCase {
 		$this->indexer->index_post( $post_id );
 		$this->indexer->delete_post( $post_id );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$count = (int) $wpdb->get_var(
 			$wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE post_id = %d", $post_id )
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$this->assertSame( 0, $count );
 	}
 
+	/** Draft posts are not indexed. */
 	public function test_index_post_skips_non_published(): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
@@ -188,10 +220,11 @@ class Indexer_Test extends \WP_UnitTestCase {
 
 		$this->indexer->index_post( $post_id );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$count = (int) $wpdb->get_var(
 			$wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE post_id = %d", $post_id )
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$this->assertSame( 0, $count );
 	}
 }

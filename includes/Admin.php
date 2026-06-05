@@ -19,7 +19,9 @@ class Admin {
 	const ACTION_KEY  = 'wp_mariadb_vector_search_reindex';
 
 	/**
-	 * @param Cron_Backfill $backfill Backfill runner.
+	 * Constructor.
+	 *
+	 * @param Cron_Backfill $backfill   Backfill runner.
 	 * @param Repository    $repository Embeddings table wrapper.
 	 */
 	public function __construct(

@@ -22,6 +22,8 @@ namespace WP_MariaDB_Vector_Search;
 class Search {
 
 	/**
+	 * Constructor.
+	 *
 	 * @param Embedding_Client $client     Embedding provider wrapper.
 	 * @param Repository       $repository Embeddings table wrapper.
 	 * @param int              $top_k      Number of posts to return.
@@ -117,7 +119,6 @@ class Search {
 			)
 		);
 
-		/** @var string[] $types */
 		$types = apply_filters( 'wp_mariadb_vector_search_post_types', $types );
 		return $types;
 	}

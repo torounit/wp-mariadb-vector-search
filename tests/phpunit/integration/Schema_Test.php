@@ -19,8 +19,16 @@ use WP_MariaDB_Vector_Search\Schema;
  */
 class Schema_Test extends \WP_UnitTestCase {
 
+	/**
+	 * Embeddings table name.
+	 *
+	 * @var string
+	 */
 	private string $table;
 
+	/**
+	 * Set up test fixtures.
+	 */
 	public function set_up(): void {
 		parent::set_up();
 		global $wpdb;
@@ -41,6 +49,9 @@ class Schema_Test extends \WP_UnitTestCase {
 		delete_option( 'wp_mariadb_vector_search_db_version' );
 	}
 
+	/**
+	 * Tear down test fixtures.
+	 */
 	public function tear_down(): void {
 		Schema::drop();
 		delete_option( 'wp_mariadb_vector_search_db_version' );
@@ -52,62 +63,69 @@ class Schema_Test extends \WP_UnitTestCase {
 		parent::tear_down();
 	}
 
+	/** Table exists after install. */
 	public function test_install_creates_table(): void {
 		global $wpdb;
 		Schema::install( 4 );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$result = $wpdb->get_var( "SHOW TABLES LIKE '{$this->table}'" );
 		$this->assertSame( $this->table, $result );
 	}
 
+	/** VECTOR column with correct dimension is created. */
 	public function test_install_creates_vector_column(): void {
 		global $wpdb;
 		Schema::install( 4 );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 		$create = $wpdb->get_var( "SHOW CREATE TABLE `{$this->table}`", 1 );
 		// MariaDB stores the column type in lowercase.
 		$this->assertMatchesRegularExpression( '/VECTOR\(4\)/i', $create );
 	}
 
+	/** Cosine vector index is created. */
 	public function test_install_creates_cosine_vector_index(): void {
 		global $wpdb;
 		Schema::install( 4 );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 		$create = $wpdb->get_var( "SHOW CREATE TABLE `{$this->table}`", 1 );
 		// MariaDB outputs "VECTOR KEY" rather than "VECTOR INDEX" in SHOW CREATE TABLE.
 		$this->assertMatchesRegularExpression( '/VECTOR (KEY|INDEX)/i', $create );
 		$this->assertStringContainsStringIgnoringCase( 'cosine', $create );
 	}
 
+	/** DB version option is set after install. */
 	public function test_install_stores_db_version(): void {
 		Schema::install( 4 );
 		$this->assertSame( Schema::DB_VERSION, get_option( 'wp_mariadb_vector_search_db_version' ) );
 	}
 
+	/** Calling install twice does not error or duplicate the table. */
 	public function test_install_is_idempotent(): void {
 		global $wpdb;
 		Schema::install( 4 );
 		Schema::install( 4 );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$count = $wpdb->get_var( "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{$this->table}'" );
 		$this->assertSame( '1', $count );
 		$this->assertSame( 0, $wpdb->last_error ? 1 : 0 );
 	}
 
+	/** Table is gone after drop. */
 	public function test_drop_removes_table(): void {
 		global $wpdb;
 		Schema::install( 4 );
 		Schema::drop();
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$result = $wpdb->get_var( "SHOW TABLES LIKE '{$this->table}'" );
 		$this->assertNull( $result );
 	}
 
+	/** Returns bool indicating VECTOR support. */
 	public function test_is_vector_supported_returns_bool(): void {
 		$this->assertIsBool( Schema::is_vector_supported() );
 	}

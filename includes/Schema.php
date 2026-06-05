@@ -12,7 +12,7 @@ namespace WP_MariaDB_Vector_Search;
 /**
  * Creates, upgrades, and drops the embeddings table.
  *
- * dbDelta() does not understand VECTOR(N) or VECTOR INDEX, so all DDL is
+ * Note: dbDelta() does not understand VECTOR(N) or VECTOR INDEX, so all DDL is
  * executed with raw $wpdb->query() calls guarded by a versioned option.
  */
 class Schema {
@@ -35,7 +35,7 @@ class Schema {
 		$charset_collate = $wpdb->get_charset_collate();
 		$current_ver     = get_option( self::DB_VERSION_OPTION, '' );
 
-		if ( $current_ver === self::DB_VERSION ) {
+		if ( self::DB_VERSION === $current_ver ) {
 			return;
 		}
 

@@ -23,15 +23,49 @@ use WP_MariaDB_Vector_Search\Search;
  */
 class Search_Test extends \WP_UnitTestCase {
 
+	/**
+	 * Repository instance.
+	 *
+	 * @var Repository
+	 */
 	private Repository $repository;
+
+	/**
+	 * Search instance under test.
+	 *
+	 * @var Search
+	 */
 	private Search $search;
+
+	/**
+	 * ID of the first test post.
+	 *
+	 * @var int
+	 */
 	private int $post_a;
+
+	/**
+	 * ID of the second test post.
+	 *
+	 * @var int
+	 */
 	private int $post_b;
+
+	/**
+	 * Number of vector dimensions used in this test suite.
+	 */
 	private const DIMS = 4;
 
-	/** @var \WP_Query|null */
+	/**
+	 * Saved main WP_Query reference for restoration.
+	 *
+	 * @var \WP_Query|null
+	 */
 	private $original_main_query;
 
+	/**
+	 * Set up test fixtures.
+	 */
 	public function set_up(): void {
 		parent::set_up();
 
@@ -84,6 +118,9 @@ class Search_Test extends \WP_UnitTestCase {
 		$this->search->register_hooks();
 	}
 
+	/**
+	 * Tear down test fixtures.
+	 */
 	public function tear_down(): void {
 		remove_all_filters( 'wp_mariadb_vector_search_embed' );
 		remove_all_filters( 'pre_get_posts' );
@@ -142,6 +179,7 @@ class Search_Test extends \WP_UnitTestCase {
 	// Tests
 	// -----------------------------------------------------------------------
 
+	/** Vector search returns at least one post. */
 	public function test_search_returns_indexed_posts(): void {
 		$query = new \WP_Query(
 			array(
@@ -159,6 +197,7 @@ class Search_Test extends \WP_UnitTestCase {
 		$this->assertNotEmpty( $query->posts );
 	}
 
+	/** Both indexed posts appear when all stub vectors are identical. */
 	public function test_search_result_contains_both_posts(): void {
 		// Both posts have identical stub vectors, so both appear in results.
 		$query = new \WP_Query(
@@ -180,6 +219,7 @@ class Search_Test extends \WP_UnitTestCase {
 		$this->assertContains( $this->post_b, $found_ids );
 	}
 
+	/** Search falls back gracefully when the embedding provider returns an error. */
 	public function test_search_falls_back_on_provider_error(): void {
 		remove_all_filters( 'wp_mariadb_vector_search_embed' );
 		add_filter(
@@ -204,6 +244,7 @@ class Search_Test extends \WP_UnitTestCase {
 		$this->assertIsArray( $query->posts );
 	}
 
+	/** A non-search query is not modified by the Search class. */
 	public function test_non_search_query_is_not_modified(): void {
 		$query = new \WP_Query(
 			array(

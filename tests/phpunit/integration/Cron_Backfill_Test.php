@@ -22,10 +22,28 @@ use WP_MariaDB_Vector_Search\Schema;
  */
 class Cron_Backfill_Test extends \WP_UnitTestCase {
 
+	/**
+	 * Cron backfill instance under test.
+	 *
+	 * @var Cron_Backfill
+	 */
 	private Cron_Backfill $backfill;
+
+	/**
+	 * Repository instance.
+	 *
+	 * @var Repository
+	 */
 	private Repository $repository;
+
+	/**
+	 * Number of vector dimensions used in this test suite.
+	 */
 	private const DIMS = 4;
 
+	/**
+	 * Set up test fixtures.
+	 */
 	public function set_up(): void {
 		parent::set_up();
 
@@ -55,6 +73,9 @@ class Cron_Backfill_Test extends \WP_UnitTestCase {
 		$this->backfill = new Cron_Backfill( $indexer, 2 );
 	}
 
+	/**
+	 * Tear down test fixtures.
+	 */
 	public function tear_down(): void {
 		remove_all_filters( 'wp_mariadb_vector_search_embed' );
 		delete_transient( Cron_Backfill::PROGRESS_KEY );
@@ -65,6 +86,7 @@ class Cron_Backfill_Test extends \WP_UnitTestCase {
 		parent::tear_down();
 	}
 
+	/** Progress transient is set after schedule(). */
 	public function test_schedule_sets_progress_transient(): void {
 		$this->backfill->schedule();
 
@@ -73,6 +95,7 @@ class Cron_Backfill_Test extends \WP_UnitTestCase {
 		$this->assertSame( 0, $progress['offset'] );
 	}
 
+	/** Posts are indexed after run_batch(). */
 	public function test_run_batch_indexes_posts(): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
@@ -88,13 +111,15 @@ class Cron_Backfill_Test extends \WP_UnitTestCase {
 		$this->backfill->schedule();
 		$this->backfill->run_batch();
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$count = (int) $wpdb->get_var(
 			$wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE post_id = %d", $post_id )
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$this->assertGreaterThan( 0, $count );
 	}
 
+	/** Force-reindex replaces existing rows. */
 	public function test_run_batch_with_force_reindexes(): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
@@ -111,34 +136,39 @@ class Cron_Backfill_Test extends \WP_UnitTestCase {
 		$this->backfill->schedule();
 		$this->backfill->run_batch();
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$hash1 = $wpdb->get_var(
 			$wpdb->prepare( "SELECT content_hash FROM `{$table}` WHERE post_id = %d LIMIT 1", $post_id )
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		// Force reindex clears old rows and re-embeds.
 		$this->backfill->schedule( true );
 		$this->backfill->run_batch();
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$hash2 = $wpdb->get_var(
 			$wpdb->prepare( "SELECT content_hash FROM `{$table}` WHERE post_id = %d LIMIT 1", $post_id )
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		// Content didn't change so hash is same, but it was re-embedded.
 		$this->assertSame( $hash1, $hash2 );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$count = (int) $wpdb->get_var(
 			$wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE post_id = %d", $post_id )
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$this->assertGreaterThan( 0, $count );
 	}
 
+	/** Null is returned when no backfill is running. */
 	public function test_get_progress_returns_null_when_idle(): void {
 		$this->assertNull( $this->backfill->get_progress() );
 	}
 
+	/** Progress array contains expected keys during a run. */
 	public function test_get_progress_returns_array_when_running(): void {
 		$this->backfill->schedule();
 		$progress = $this->backfill->get_progress();

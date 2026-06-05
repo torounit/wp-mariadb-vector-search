@@ -34,9 +34,8 @@ class Repository {
 		foreach ( $vector as $value ) {
 			$f = (float) $value;
 			if ( is_nan( $f ) || is_infinite( $f ) ) {
-				throw new \InvalidArgumentException(
-					'Vector components must be finite numbers; got ' . var_export( $value, true ) . '.'
-				);
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- exception messages are not HTML output.
+				throw new \InvalidArgumentException( 'Vector components must be finite numbers; got ' . (string) $f . '.' );
 			}
 			// number_format always uses '.' as the decimal separator (locale-safe).
 			// 10 decimal places covers float32 precision for values in [-1, 1].
@@ -126,10 +125,11 @@ class Repository {
 	public function get_content_hash( int $post_id ): ?string {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$result = $wpdb->get_var(
 			$wpdb->prepare( "SELECT content_hash FROM `{$table}` WHERE post_id = %d LIMIT 1", $post_id )
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		return is_string( $result ) ? $result : null;
 	}
 

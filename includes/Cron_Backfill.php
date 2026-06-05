@@ -21,6 +21,8 @@ class Cron_Backfill {
 	const DEFAULT_BATCH = 10;
 
 	/**
+	 * Constructor.
+	 *
 	 * @param Indexer $indexer Embedding + storage pipeline.
 	 * @param int     $batch   Posts to process per cron firing.
 	 */
