@@ -13,13 +13,16 @@ use WordPress\AiClient\AiClient;
 use WordPress\AiClient\Messages\DTO\Message;
 use WordPress\AiClient\Messages\DTO\MessagePart;
 use WordPress\AiClient\Messages\Enums\MessageRoleEnum;
+use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiProvider;
+use WordPress\AiClient\Providers\DTO\ProviderMetadata;
+use WordPress\AiClient\Providers\Enums\ProviderTypeEnum;
 use WordPress\AiClient\Providers\Http\Contracts\HttpTransporterInterface;
 use WordPress\AiClient\Providers\Http\Contracts\RequestAuthenticationInterface;
 use WordPress\AiClient\Providers\Http\DTO\Request;
 use WordPress\AiClient\Providers\Http\Enums\HttpMethodEnum;
-use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiProvider;
 use WordPress\AiClient\Providers\Http\HttpTransporterFactory;
 use WordPress\AiClient\Providers\Http\Util\ResponseUtil;
+use WordPress\AiClient\Providers\Models\DTO\ModelMetadata;
 use WordPress\AiClient\Providers\Models\DTO\ModelRequirements;
 use WordPress\AiClient\Providers\Models\Enums\CapabilityEnum;
 use WordPress\AiClient\Providers\ProviderRegistry;
@@ -82,9 +85,13 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 	/**
 	 * Generate text embeddings for a batch of texts.
 	 *
-	 * Uses the AI Client provider registry to find the first configured provider
-	 * that supports embedding generation, makes a direct HTTP request, and returns
-	 * a GenerativeAiResult with the embedding vectors in additionalData['embeddings'].
+	 * Resolution order:
+	 *  1. Capability auto-detection via the provider registry — used when a provider
+	 *     declares embeddingGeneration support.
+	 *  2. Fixed default fallback (filterable) — used when auto-detection finds no
+	 *     candidates (e.g. the OpenAI provider plugin does not tag embedding models
+	 *     with embeddingGeneration capability). Default: openai / text-embedding-3-small.
+	 *     Override via the wp_mariadb_vector_search_embedding_model filter.
 	 *
 	 * @param string[] $texts Non-empty array of strings to embed.
 	 * @return GenerativeAiResult|\WP_Error Result with embeddings in additionalData, or WP_Error on failure.
@@ -97,15 +104,37 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 
 		$candidates = $this->registry->findModelsMetadataForSupport( $requirements );
 
-		if ( empty( $candidates ) ) {
-			return new \WP_Error(
-				'no_authentication',
-				__( 'No configured embedding provider found. Configure one in Settings > General > AI Connector.', 'wp-mariadb-vector-search' )
+		if ( ! empty( $candidates ) ) {
+			// Auto-detection succeeded: use the first capable provider/model.
+			$provider_metadata = $candidates[0]->getProvider();
+			$model_metadata    = $candidates[0]->getModels()[0];
+		} else {
+			// Auto-detection failed: fall back to the fixed default (filterable).
+			$selection = apply_filters(
+				'wp_mariadb_vector_search_embedding_model',
+				array(
+					'provider' => 'openai',
+					'model'    => 'text-embedding-3-small',
+				)
+			);
+			$provider  = is_array( $selection ) ? (string) ( $selection['provider'] ?? '' ) : '';
+			$model     = is_array( $selection ) ? (string) ( $selection['model'] ?? '' ) : '';
+
+			if ( '' === $provider || '' === $model || ! $this->is_provider_usable( $provider ) ) {
+				return new \WP_Error(
+					'no_authentication',
+					__( 'No configured embedding provider found. Configure one in Settings > General > AI Connector.', 'wp-mariadb-vector-search' )
+				);
+			}
+
+			$provider_metadata = new ProviderMetadata( $provider, $provider, ProviderTypeEnum::cloud() );
+			$model_metadata    = new ModelMetadata(
+				$model,
+				$model,
+				array( CapabilityEnum::embeddingGeneration() ),
+				array()
 			);
 		}
-
-		$provider_metadata = $candidates[0]->getProvider();
-		$model_metadata    = $candidates[0]->getModels()[0];
 
 		$vectors = $this->try_provider( $texts, $provider_metadata->getId(), $model_metadata->getId() );
 
@@ -124,6 +153,35 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 			$model_metadata,
 			array( 'embeddings' => $vectors )
 		);
+	}
+
+	/**
+	 * Check whether a provider is registered and usable.
+	 *
+	 * Returns true when:
+	 *  - The provider is registered in the registry, AND
+	 *  - Auth has been injected externally (unit-test path), OR the provider is configured
+	 *    (i.e. has an API key set via the AI Connector settings).
+	 *
+	 * @param string $provider Provider id.
+	 * @return bool
+	 */
+	private function is_provider_usable( string $provider ): bool {
+		try {
+			if ( ! $this->registry->hasProvider( $provider ) ) {
+				return false;
+			}
+
+			// When auth is injected externally (e.g. unit tests), skip the
+			// isProviderConfigured check — the injected auth takes precedence.
+			if ( null !== $this->auth ) {
+				return true;
+			}
+
+			return $this->registry->isProviderConfigured( $provider );
+		} catch ( \Throwable ) {
+			return false;
+		}
 	}
 
 	/**

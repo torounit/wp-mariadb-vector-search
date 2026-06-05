@@ -36,11 +36,13 @@ class Plugin {
 	 */
 	public function register_hooks(): void {
 		if ( ! Schema::is_vector_supported() ) {
+			wp_mariadb_vector_search_log( 'register_hooks: VECTOR not supported by this database; indexing hooks NOT registered.' );
 			add_action( 'admin_notices', array( $this, 'notice_no_vector' ) );
 			return;
 		}
 
 		$this->maybe_install_schema();
+		wp_mariadb_vector_search_log( 'register_hooks: schema installed=' . ( Schema::is_installed() ? 'yes' : 'no' ) . '.' );
 
 		$repository = new Repository();
 		$client     = new Embedding_Client();

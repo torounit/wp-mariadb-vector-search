@@ -38,6 +38,39 @@ function wp_mariadb_vector_search_prompt( ?string $prompt = null ): WP_MariaDB_V
 	return new WP_MariaDB_Vector_Search\Embedding_Prompt_Builder( $prompt );
 }
 
+/**
+ * Write a diagnostic message to the PHP error log when WP_DEBUG is enabled.
+ *
+ * All messages are prefixed with "[wp-mariadb-vector-search]" so they can be
+ * grepped from wp-content/debug.log to diagnose indexing failures.
+ *
+ * @param string $message Human-readable description of the event.
+ * @return void
+ */
+function wp_mariadb_vector_search_log( string $message ): void {
+	if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+		return;
+	}
+
+	$log_path = ( defined( 'WP_DEBUG_LOG' ) && is_string( WP_DEBUG_LOG ) )
+		? WP_DEBUG_LOG
+		: ( defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR . '/debug.log' : '' );
+
+	$line = '[wp-mariadb-vector-search] ' . $message . PHP_EOL;
+
+	if ( '' !== $log_path ) {
+		$dir = dirname( $log_path );
+		if ( ! is_dir( $dir ) ) {
+			wp_mkdir_p( $dir );
+		}
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( $line, 3, $log_path );
+	} else {
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( $line );
+	}
+}
+
 
 register_activation_hook( __FILE__, array( 'WP_MariaDB_Vector_Search\\Plugin', 'activate' ) );
 register_deactivation_hook( __FILE__, array( 'WP_MariaDB_Vector_Search\\Plugin', 'deactivate' ) );

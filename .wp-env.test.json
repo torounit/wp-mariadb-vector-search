@@ -1,11 +1,12 @@
 {
 	"$schema": "https://schemas.wp.org/trunk/wp-env.json",
-	"core": "https://wordpress.org/nightly-builds/wordpress-latest.zip",
+	"core": null,
 	"testsEnvironment": false,
 	"plugins": [
 		".",
 		"https://downloads.wordpress.org/plugin/ai-provider-for-google.zip",
-		"https://downloads.wordpress.org/plugin/ai-provider-for-openai.zip"
+		"https://downloads.wordpress.org/plugin/ai-provider-for-openai.zip",
+		"torounit/ai-provider-for-lm-studio"
 	],
 	"port": 8889,
 	"config": {

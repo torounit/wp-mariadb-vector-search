@@ -78,12 +78,17 @@ class Repository {
 		$dims  = count( $chunks[0]['vector'] );
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->query( $wpdb->prepare( "DELETE FROM `{$table}` WHERE post_id = %d", $post_id ) );
+		$del = $wpdb->query( $wpdb->prepare( "DELETE FROM `{$table}` WHERE post_id = %d", $post_id ) );
+		if ( false === $del ) {
+			wp_mariadb_vector_search_log(
+				sprintf( 'replace_post_chunks(%d): DELETE failed: %s', $post_id, $wpdb->last_error )
+			);
+		}
 
 		foreach ( $chunks as $chunk ) {
 			$vec_literal = self::format_vector_literal( $chunk['vector'] );
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$wpdb->query(
+			$ok = $wpdb->query(
 				$wpdb->prepare(
 					"INSERT INTO `{$table}`
 					(post_id, chunk_index, post_type, model, dimensions, embedding, chunk_text, content_hash, updated_at)
@@ -100,6 +105,17 @@ class Repository {
 				)
 			);
 			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( false === $ok ) {
+				wp_mariadb_vector_search_log(
+					sprintf(
+						'replace_post_chunks(%d): INSERT chunk %d failed (dims=%d): %s',
+						$post_id,
+						$chunk['chunk_index'],
+						$dims,
+						$wpdb->last_error
+					)
+				);
+			}
 		}
 	}
 
