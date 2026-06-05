@@ -63,13 +63,13 @@ class Repository_Test extends \WP_UnitTestCase {
 			'post',
 			'hash1',
 			'model',
-			[
-				[
+			array(
+				array(
 					'chunk_index' => 0,
 					'chunk_text'  => 'Hello',
-					'vector'      => [ 1.0, 0.0, 0.0, 0.0 ],
-				],
-			]
+					'vector'      => array( 1.0, 0.0, 0.0, 0.0 ),
+				),
+			)
 		);
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -81,13 +81,13 @@ class Repository_Test extends \WP_UnitTestCase {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
 
-		$chunk = [
+		$chunk = array(
 			'chunk_index' => 0,
 			'chunk_text'  => 'Hello',
-			'vector'      => [ 1.0, 0.0, 0.0, 0.0 ],
-		];
-		$this->repository->replace_post_chunks( 1, 'post', 'hash1', 'model', [ $chunk ] );
-		$this->repository->replace_post_chunks( 1, 'post', 'hash2', 'model', [ $chunk ] );
+			'vector'      => array( 1.0, 0.0, 0.0, 0.0 ),
+		);
+		$this->repository->replace_post_chunks( 1, 'post', 'hash1', 'model', array( $chunk ) );
+		$this->repository->replace_post_chunks( 1, 'post', 'hash2', 'model', array( $chunk ) );
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}` WHERE post_id = 1" );
@@ -103,13 +103,13 @@ class Repository_Test extends \WP_UnitTestCase {
 			'post',
 			'abc123',
 			'model',
-			[
-				[
+			array(
+				array(
 					'chunk_index' => 0,
 					'chunk_text'  => 'Text',
-					'vector'      => [ 0.5, 0.5, 0.5, 0.5 ],
-				],
-			]
+					'vector'      => array( 0.5, 0.5, 0.5, 0.5 ),
+				),
+			)
 		);
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -130,18 +130,18 @@ class Repository_Test extends \WP_UnitTestCase {
 			'post',
 			'h',
 			'model',
-			[
-				[
+			array(
+				array(
 					'chunk_index' => 0,
 					'chunk_text'  => 'A',
-					'vector'      => [ 1.0, 0.0, 0.0, 0.0 ],
-				],
-				[
+					'vector'      => array( 1.0, 0.0, 0.0, 0.0 ),
+				),
+				array(
 					'chunk_index' => 1,
 					'chunk_text'  => 'B',
-					'vector'      => [ 0.0, 1.0, 0.0, 0.0 ],
-				],
-			]
+					'vector'      => array( 0.0, 1.0, 0.0, 0.0 ),
+				),
+			)
 		);
 
 		$this->repository->delete_post( 5 );
@@ -161,13 +161,13 @@ class Repository_Test extends \WP_UnitTestCase {
 			'post',
 			'myhash',
 			'model',
-			[
-				[
+			array(
+				array(
 					'chunk_index' => 0,
 					'chunk_text'  => 'T',
-					'vector'      => [ 1.0, 0.0, 0.0, 0.0 ],
-				],
-			]
+					'vector'      => array( 1.0, 0.0, 0.0, 0.0 ),
+				),
+			)
 		);
 
 		$this->assertSame( 'myhash', $this->repository->get_content_hash( 7 ) );
@@ -188,7 +188,13 @@ class Repository_Test extends \WP_UnitTestCase {
 			'post',
 			'h1',
 			'model',
-			[ [ 'chunk_index' => 0, 'chunk_text' => 'A', 'vector' => [ 1.0, 0.0, 0.0, 0.0 ] ] ]
+			array(
+				array(
+					'chunk_index' => 0,
+					'chunk_text'  => 'A',
+					'vector'      => array( 1.0, 0.0, 0.0, 0.0 ),
+				),
+			)
 		);
 		// Post 2: far from query
 		$this->repository->replace_post_chunks(
@@ -196,28 +202,40 @@ class Repository_Test extends \WP_UnitTestCase {
 			'post',
 			'h2',
 			'model',
-			[ [ 'chunk_index' => 0, 'chunk_text' => 'B', 'vector' => [ 0.0, 1.0, 0.0, 0.0 ] ] ]
+			array(
+				array(
+					'chunk_index' => 0,
+					'chunk_text'  => 'B',
+					'vector'      => array( 0.0, 1.0, 0.0, 0.0 ),
+				),
+			)
 		);
 
-		$ids = $this->repository->knn( [ 1.0, 0.0, 0.0, 0.0 ], 5, [ 'post' ] );
+		$ids = $this->repository->knn( array( 1.0, 0.0, 0.0, 0.0 ), 5, array( 'post' ) );
 
-		$this->assertSame( [ 1, 2 ], $ids );
+		$this->assertSame( array( 1, 2 ), $ids );
 	}
 
 	public function test_knn_respects_top_k(): void {
 		for ( $i = 1; $i <= 5; $i++ ) {
-			$vec = array_fill( 0, self::DIMS, 0.0 );
+			$vec    = array_fill( 0, self::DIMS, 0.0 );
 			$vec[0] = (float) $i / 5;
 			$this->repository->replace_post_chunks(
 				$i,
 				'post',
 				"h{$i}",
 				'model',
-				[ [ 'chunk_index' => 0, 'chunk_text' => "T{$i}", 'vector' => $vec ] ]
+				array(
+					array(
+						'chunk_index' => 0,
+						'chunk_text'  => "T{$i}",
+						'vector'      => $vec,
+					),
+				)
 			);
 		}
 
-		$ids = $this->repository->knn( [ 1.0, 0.0, 0.0, 0.0 ], 2, [ 'post' ] );
+		$ids = $this->repository->knn( array( 1.0, 0.0, 0.0, 0.0 ), 2, array( 'post' ) );
 		$this->assertCount( 2, $ids );
 	}
 
@@ -227,17 +245,29 @@ class Repository_Test extends \WP_UnitTestCase {
 			'post',
 			'h10',
 			'model',
-			[ [ 'chunk_index' => 0, 'chunk_text' => 'X', 'vector' => [ 1.0, 0.0, 0.0, 0.0 ] ] ]
+			array(
+				array(
+					'chunk_index' => 0,
+					'chunk_text'  => 'X',
+					'vector'      => array( 1.0, 0.0, 0.0, 0.0 ),
+				),
+			)
 		);
 		$this->repository->replace_post_chunks(
 			11,
 			'page',
 			'h11',
 			'model',
-			[ [ 'chunk_index' => 0, 'chunk_text' => 'Y', 'vector' => [ 1.0, 0.0, 0.0, 0.0 ] ] ]
+			array(
+				array(
+					'chunk_index' => 0,
+					'chunk_text'  => 'Y',
+					'vector'      => array( 1.0, 0.0, 0.0, 0.0 ),
+				),
+			)
 		);
 
-		$ids = $this->repository->knn( [ 1.0, 0.0, 0.0, 0.0 ], 10, [ 'post' ] );
+		$ids = $this->repository->knn( array( 1.0, 0.0, 0.0, 0.0 ), 10, array( 'post' ) );
 		$this->assertContains( 10, $ids );
 		$this->assertNotContains( 11, $ids );
 	}
@@ -249,10 +279,18 @@ class Repository_Test extends \WP_UnitTestCase {
 			'post',
 			'h1',
 			'model',
-			[
-				[ 'chunk_index' => 0, 'chunk_text' => 'A', 'vector' => [ 0.0, 1.0, 0.0, 0.0 ] ],
-				[ 'chunk_index' => 1, 'chunk_text' => 'B', 'vector' => [ 1.0, 0.0, 0.0, 0.0 ] ],
-			]
+			array(
+				array(
+					'chunk_index' => 0,
+					'chunk_text'  => 'A',
+					'vector'      => array( 0.0, 1.0, 0.0, 0.0 ),
+				),
+				array(
+					'chunk_index' => 1,
+					'chunk_text'  => 'B',
+					'vector'      => array( 1.0, 0.0, 0.0, 0.0 ),
+				),
+			)
 		);
 		// Post 2 has one chunk, slightly less close to query.
 		$this->repository->replace_post_chunks(
@@ -260,11 +298,17 @@ class Repository_Test extends \WP_UnitTestCase {
 			'post',
 			'h2',
 			'model',
-			[ [ 'chunk_index' => 0, 'chunk_text' => 'C', 'vector' => [ 0.9, 0.1, 0.0, 0.0 ] ] ]
+			array(
+				array(
+					'chunk_index' => 0,
+					'chunk_text'  => 'C',
+					'vector'      => array( 0.9, 0.1, 0.0, 0.0 ),
+				),
+			)
 		);
 
 		// Query is [1,0,0,0]: post 1 chunk 1 is the exact match, so post 1 should rank first.
-		$ids = $this->repository->knn( [ 1.0, 0.0, 0.0, 0.0 ], 5, [ 'post' ] );
+		$ids = $this->repository->knn( array( 1.0, 0.0, 0.0, 0.0 ), 5, array( 'post' ) );
 		$this->assertSame( 1, $ids[0] );
 	}
 }

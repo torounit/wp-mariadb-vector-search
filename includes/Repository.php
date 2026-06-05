@@ -165,9 +165,9 @@ class Repository {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
 
-		$vec_literal    = self::format_vector_literal( $query_vector );
-		$inner_limit    = $k * $overscan;
-		$type_list      = implode( ',', array_map( static fn( $t ) => "'" . esc_sql( $t ) . "'", $post_types ) );
+		$vec_literal = self::format_vector_literal( $query_vector );
+		$inner_limit = $k * $overscan;
+		$type_list   = implode( ',', array_map( static fn( $t ) => "'" . esc_sql( $t ) . "'", $post_types ) );
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$rows = $wpdb->get_results(

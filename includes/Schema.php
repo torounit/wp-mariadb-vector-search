@@ -17,7 +17,7 @@ namespace WP_MariaDB_Vector_Search;
  */
 class Schema {
 
-	const DB_VERSION       = '1';
+	const DB_VERSION        = '1';
 	const DB_VERSION_OPTION = 'wp_mariadb_vector_search_db_version';
 
 	/**

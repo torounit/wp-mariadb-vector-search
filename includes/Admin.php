@@ -69,7 +69,10 @@ class Admin {
 
 		wp_safe_redirect(
 			add_query_arg(
-				array( 'page' => self::PAGE_SLUG, 'scheduled' => '1' ),
+				array(
+					'page'      => self::PAGE_SLUG,
+					'scheduled' => '1',
+				),
 				admin_url( 'tools.php' )
 			)
 		);
@@ -82,10 +85,10 @@ class Admin {
 	 * @return void
 	 */
 	public function render_page(): void {
-		$is_supported   = Schema::is_vector_supported();
-		$schema_ready   = $is_supported && Schema::is_installed();
-		$progress       = $this->backfill->get_progress();
-		$indexed        = $schema_ready ? $this->repository->count_indexed() : 0;
+		$is_supported = Schema::is_vector_supported();
+		$schema_ready = $is_supported && Schema::is_installed();
+		$progress     = $this->backfill->get_progress();
+		$indexed      = $schema_ready ? $this->repository->count_indexed() : 0;
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'MariaDB Vector Search', 'wp-mariadb-vector-search' ); ?></h1>

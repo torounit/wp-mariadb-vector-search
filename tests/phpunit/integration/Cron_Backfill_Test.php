@@ -23,8 +23,8 @@ use WP_MariaDB_Vector_Search\Schema;
 class Cron_Backfill_Test extends \WP_UnitTestCase {
 
 	private Cron_Backfill $backfill;
-	private Repository    $repository;
-	private const DIMS    = 4;
+	private Repository $repository;
+	private const DIMS = 4;
 
 	public function set_up(): void {
 		parent::set_up();
@@ -45,7 +45,7 @@ class Cron_Backfill_Test extends \WP_UnitTestCase {
 		add_filter(
 			'wp_mariadb_vector_search_embed',
 			static function ( $result, array $texts ) {
-				return array_map( static fn() => [ 0.5, 0.5, 0.5, 0.5 ], $texts );
+				return array_map( static fn() => array( 0.5, 0.5, 0.5, 0.5 ), $texts );
 			},
 			10,
 			2
@@ -78,7 +78,11 @@ class Cron_Backfill_Test extends \WP_UnitTestCase {
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
 
 		$post_id = $this->factory->post->create(
-			array( 'post_title' => 'B', 'post_content' => 'Body.', 'post_status' => 'publish' )
+			array(
+				'post_title'   => 'B',
+				'post_content' => 'Body.',
+				'post_status'  => 'publish',
+			)
 		);
 
 		$this->backfill->schedule();
@@ -96,7 +100,11 @@ class Cron_Backfill_Test extends \WP_UnitTestCase {
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
 
 		$post_id = $this->factory->post->create(
-			array( 'post_title' => 'B', 'post_content' => 'Body.', 'post_status' => 'publish' )
+			array(
+				'post_title'   => 'B',
+				'post_content' => 'Body.',
+				'post_status'  => 'publish',
+			)
 		);
 
 		// First index.

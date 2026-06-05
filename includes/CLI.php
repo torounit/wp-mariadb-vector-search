@@ -45,22 +45,29 @@ class CLI {
 	 * @return void
 	 */
 	public function reindex( array $args, array $assoc_args ): void {
-		$force      = \WP_CLI\Utils\get_flag_value( $assoc_args, 'force', false );
-		$batch      = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'batch', 50 );
-		$post_type  = \WP_CLI\Utils\get_flag_value( $assoc_args, 'post-type', null );
+		$force     = \WP_CLI\Utils\get_flag_value( $assoc_args, 'force', false );
+		$batch     = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'batch', 50 );
+		$post_type = \WP_CLI\Utils\get_flag_value( $assoc_args, 'post-type', null );
 
 		if ( $post_type ) {
 			$post_types = array( $post_type );
 		} else {
 			$post_types = apply_filters(
 				'wp_mariadb_vector_search_post_types',
-				array_keys( get_post_types( array( 'public' => true, 'exclude_from_search' => false ) ) )
+				array_keys(
+					get_post_types(
+						array(
+							'public'              => true,
+							'exclude_from_search' => false,
+						)
+					)
+				)
 			);
 		}
 
-		$count   = 0;
-		$offset  = 0;
-		$total   = $this->count_posts( $post_types );
+		$count  = 0;
+		$offset = 0;
+		$total  = $this->count_posts( $post_types );
 
 		\WP_CLI::log( sprintf( 'Reindexing %d posts…', $total ) );
 		$progress = \WP_CLI\Utils\make_progress_bar( 'Indexing', $total );

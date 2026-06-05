@@ -22,7 +22,7 @@ use WP_MariaDB_Vector_Search\Schema;
  */
 class Indexer_Test extends \WP_UnitTestCase {
 
-	private Indexer    $indexer;
+	private Indexer $indexer;
 	private Repository $repository;
 	private const DIMS = 4;
 
@@ -48,7 +48,7 @@ class Indexer_Test extends \WP_UnitTestCase {
 		add_filter(
 			'wp_mariadb_vector_search_embed',
 			static function ( $result, array $texts ) {
-				return array_map( static fn() => [ 0.5, 0.5, 0.5, 0.5 ], $texts );
+				return array_map( static fn() => array( 0.5, 0.5, 0.5, 0.5 ), $texts );
 			},
 			10,
 			2

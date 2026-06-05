@@ -24,9 +24,9 @@ use WP_MariaDB_Vector_Search\Search;
 class Search_Test extends \WP_UnitTestCase {
 
 	private Repository $repository;
-	private Search     $search;
-	private int        $post_a;
-	private int        $post_b;
+	private Search $search;
+	private int $post_a;
+	private int $post_b;
 	private const DIMS = 4;
 
 	/** @var \WP_Query|null */
@@ -52,7 +52,7 @@ class Search_Test extends \WP_UnitTestCase {
 		add_filter(
 			'wp_mariadb_vector_search_embed',
 			static function ( $result, array $texts ) {
-				return array_map( static fn() => [ 1.0, 0.0, 0.0, 0.0 ], $texts );
+				return array_map( static fn() => array( 1.0, 0.0, 0.0, 0.0 ), $texts );
 			},
 			10,
 			2
@@ -63,10 +63,18 @@ class Search_Test extends \WP_UnitTestCase {
 		$indexer = new Indexer( $client, $this->repository );
 
 		$this->post_a = $this->factory->post->create(
-			array( 'post_title' => 'Cats', 'post_content' => 'About cats.', 'post_status' => 'publish' )
+			array(
+				'post_title'   => 'Cats',
+				'post_content' => 'About cats.',
+				'post_status'  => 'publish',
+			)
 		);
 		$this->post_b = $this->factory->post->create(
-			array( 'post_title' => 'Dogs', 'post_content' => 'About dogs.', 'post_status' => 'publish' )
+			array(
+				'post_title'   => 'Dogs',
+				'post_content' => 'About dogs.',
+				'post_status'  => 'publish',
+			)
 		);
 
 		$indexer->index_post( $this->post_a );

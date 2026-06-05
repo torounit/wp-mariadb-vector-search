@@ -78,7 +78,14 @@ class Cron_Backfill {
 		$force      = (bool) $progress['force'];
 		$post_types = apply_filters(
 			'wp_mariadb_vector_search_post_types',
-			array_keys( get_post_types( array( 'public' => true, 'exclude_from_search' => false ) ) )
+			array_keys(
+				get_post_types(
+					array(
+						'public'              => true,
+						'exclude_from_search' => false,
+					)
+				)
+			)
 		);
 
 		$posts = get_posts(
@@ -93,7 +100,7 @@ class Cron_Backfill {
 		);
 
 		if ( 0 === $offset ) {
-			$total = $this->count_posts( $post_types );
+			$total             = $this->count_posts( $post_types );
 			$progress['total'] = $total;
 		}
 
