@@ -28,6 +28,17 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 	require_once __DIR__ . '/vendor/autoload.php';
 }
 
+/**
+ * Create an Embedding_Prompt_Builder for building embedding requests.
+ *
+ * @param string|null $prompt Optional initial prompt text.
+ * @return WP_MariaDB_Vector_Search\Embedding_Prompt_Builder
+ */
+function wp_mariadb_vector_search_prompt( ?string $prompt = null ): WP_MariaDB_Vector_Search\Embedding_Prompt_Builder {
+	return new WP_MariaDB_Vector_Search\Embedding_Prompt_Builder( $prompt );
+}
+
+
 register_activation_hook( __FILE__, array( 'WP_MariaDB_Vector_Search\\Plugin', 'activate' ) );
 register_deactivation_hook( __FILE__, array( 'WP_MariaDB_Vector_Search\\Plugin', 'deactivate' ) );
 
