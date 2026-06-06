@@ -13,8 +13,8 @@
 	},
 	"scripts": {
 		"wp-env": "wp-env",
-		"build:js": "wp-build",
-		"start:js": "wp-build --watch",
+		"build:js": "wp-build && node tools/ensure-boot-asset.cjs",
+		"start:js": "node tools/ensure-boot-asset.cjs && wp-build --watch",
 		"build": "npm run build:js",
 		"start": "npm run start:js",
 		"test:php": "npm-run-all test:php:setup test:php:base",
