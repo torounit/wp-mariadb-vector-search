@@ -19,6 +19,7 @@ use WordPress\AiClient\Providers\Enums\ProviderTypeEnum;
 use WordPress\AiClient\Providers\Http\Contracts\HttpTransporterInterface;
 use WordPress\AiClient\Providers\Http\Contracts\RequestAuthenticationInterface;
 use WordPress\AiClient\Providers\Http\DTO\Request;
+use WordPress\AiClient\Providers\Http\DTO\RequestOptions;
 use WordPress\AiClient\Providers\Http\Enums\HttpMethodEnum;
 use WordPress\AiClient\Providers\Http\HttpTransporterFactory;
 use WordPress\AiClient\Providers\Http\Util\ResponseUtil;
@@ -264,6 +265,22 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 	}
 
 	/**
+	 * Build request options with the configured HTTP timeout.
+	 *
+	 * The timeout defaults to 60 s to accommodate local models (e.g. LM Studio)
+	 * that need several seconds to load before responding.
+	 * Override with the wp_mariadb_vector_search_embedding_timeout filter.
+	 *
+	 * @return RequestOptions
+	 */
+	private function build_request_options(): RequestOptions {
+		$timeout = (float) apply_filters( 'wp_mariadb_vector_search_embedding_timeout', 60.0 );
+		$options = new RequestOptions();
+		$options->setTimeout( $timeout );
+		return $options;
+	}
+
+	/**
 	 * Build an OpenAI /v1/embeddings request.
 	 *
 	 * @param string[] $texts    Texts to embed.
@@ -281,7 +298,8 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 					'model' => $model,
 					'input' => $texts,
 				)
-			)
+			),
+			$this->build_request_options()
 		);
 	}
 
@@ -310,7 +328,8 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 				'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':batchEmbedContents'
 			),
 			array( 'Content-Type' => 'application/json' ),
-			(string) wp_json_encode( array( 'requests' => $requests ) )
+			(string) wp_json_encode( array( 'requests' => $requests ) ),
+			$this->build_request_options()
 		);
 	}
 
