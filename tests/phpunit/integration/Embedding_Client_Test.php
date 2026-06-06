@@ -21,6 +21,7 @@ class Embedding_Client_Test extends \WP_UnitTestCase {
 	 */
 	public function tear_down(): void {
 		remove_all_filters( 'wp_mariadb_vector_search_embed' );
+		remove_all_filters( 'wp_mariadb_vector_search_embed_model' );
 		parent::tear_down();
 	}
 
@@ -79,5 +80,30 @@ class Embedding_Client_Test extends \WP_UnitTestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame( array( 0.5, 0.5 ), $result[0] );
+	}
+
+	/** The wp_mariadb_vector_search_embed_model filter is applied and surfaces the model via the out-param. */
+	public function test_embed_surfaces_model(): void {
+		add_filter(
+			'wp_mariadb_vector_search_embed',
+			static function ( $_default, array $texts ) {
+				return array_map( static fn() => array( 1.0, 0.0, 0.0 ), $texts );
+			},
+			10,
+			2
+		);
+
+		add_filter(
+			'wp_mariadb_vector_search_embed_model',
+			static function () {
+				return 'my-model';
+			}
+		);
+
+		$model  = null;
+		$client = new Embedding_Client();
+		$client->embed( array( 'hello' ), $model );
+
+		$this->assertSame( 'my-model', $model );
 	}
 }

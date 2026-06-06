@@ -71,6 +71,14 @@ class Indexer_Test extends \WP_UnitTestCase {
 			10,
 			2
 		);
+
+		// Stub model name surfaced via the embed_model filter.
+		add_filter(
+			'wp_mariadb_vector_search_embed_model',
+			static function () {
+				return 'stub-model';
+			}
+		);
 	}
 
 	/**
@@ -78,6 +86,7 @@ class Indexer_Test extends \WP_UnitTestCase {
 	 */
 	public function tear_down(): void {
 		remove_all_filters( 'wp_mariadb_vector_search_embed' );
+		remove_all_filters( 'wp_mariadb_vector_search_embed_model' );
 		Schema::drop();
 		delete_option( 'wp_mariadb_vector_search_db_version' );
 		add_filter( 'query', array( $this, '_create_temporary_tables' ) );
@@ -203,6 +212,30 @@ class Indexer_Test extends \WP_UnitTestCase {
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$this->assertSame( 0, $count );
+	}
+
+	/** The model column stores the model id surfaced by the embed_model filter. */
+	public function test_index_post_stores_model(): void {
+		global $wpdb;
+		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
+
+		$post_id = $this->factory->post->create(
+			array(
+				'post_title'   => 'Model Test',
+				'post_content' => 'Content to embed.',
+				'post_status'  => 'publish',
+			)
+		);
+
+		$this->indexer->index_post( $post_id );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$model = $wpdb->get_var(
+			$wpdb->prepare( "SELECT model FROM `{$table}` WHERE post_id = %d LIMIT 1", $post_id )
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		$this->assertSame( 'stub-model', $model );
 	}
 
 	/** Draft posts are not indexed. */
