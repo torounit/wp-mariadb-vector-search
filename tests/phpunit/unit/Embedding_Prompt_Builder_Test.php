@@ -195,6 +195,81 @@ class Embedding_Prompt_Builder_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * When the filter returns a dimensions key, that value is forwarded in the request body.
+	 */
+	public function test_filter_dimensions_forwarded_in_request_body(): void {
+		$payload  = (string) wp_json_encode(
+			array( 'data' => array( array( 'embedding' => array( 0.1, 0.2 ) ) ) )
+		);
+		$response = new Response( 200, array(), $payload );
+
+		$transport = $this->createMock( HttpTransporterInterface::class );
+		$transport->expects( $this->once() )
+			->method( 'send' )
+			->with(
+				$this->callback(
+					static function ( Request $req ): bool {
+						$body = json_decode( (string) $req->getBody(), true );
+						return 768 === ( $body['dimensions'] ?? null );
+					}
+				)
+			)
+			->willReturn( $response );
+
+		$registry = $this->createMock( ProviderRegistry::class );
+		$registry->method( 'findModelsMetadataForSupport' )->willReturn( array() );
+		$registry->method( 'hasProvider' )->willReturn( true );
+
+		add_filter(
+			'wp_mariadb_vector_search_embedding_model',
+			static function (): array {
+				return array(
+					'provider'   => 'openai',
+					'model'      => 'text-embedding-3-small',
+					'dimensions' => 768,
+				);
+			}
+		);
+
+		$builder = new Embedding_Prompt_Builder( null, $transport, $this->make_auth(), $registry );
+		$result  = $builder->generate_embeddings_result( array( 'hello' ) );
+
+		remove_all_filters( 'wp_mariadb_vector_search_embedding_model' );
+
+		$this->assertInstanceOf( GenerativeAiResult::class, $result );
+	}
+
+	/**
+	 * When dimensions is not specified in the filter, the request body does not include it.
+	 */
+	public function test_no_dimensions_key_when_filter_omits_it(): void {
+		$payload  = (string) wp_json_encode(
+			array( 'data' => array( array( 'embedding' => array( 0.1 ) ) ) )
+		);
+		$response = new Response( 200, array(), $payload );
+
+		$transport = $this->createMock( HttpTransporterInterface::class );
+		$transport->expects( $this->once() )
+			->method( 'send' )
+			->with(
+				$this->callback(
+					static function ( Request $req ): bool {
+						$body = json_decode( (string) $req->getBody(), true );
+						return ! array_key_exists( 'dimensions', $body );
+					}
+				)
+			)
+			->willReturn( $response );
+
+		$registry = $this->createMock( ProviderRegistry::class );
+		$registry->method( 'findModelsMetadataForSupport' )->willReturn( array() );
+		$registry->method( 'hasProvider' )->willReturn( true );
+
+		$builder = new Embedding_Prompt_Builder( null, $transport, $this->make_auth(), $registry );
+		$builder->generate_embeddings_result( array( 'hello' ) );
+	}
+
+	/**
 	 * Returns WP_Error when capability detection fails AND the fallback provider is not configured.
 	 */
 	public function test_returns_error_when_discovery_empty_and_fallback_not_configured(): void {
