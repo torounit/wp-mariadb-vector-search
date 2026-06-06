@@ -18,7 +18,6 @@ class Admin {
 	const REINDEX_CAP  = 'manage_options';
 	const ACTION_KEY   = 'wp_mariadb_vector_search_reindex';
 	const SAVE_MODEL   = 'wp_mariadb_vector_search_save_model';
-	const REBUILD_KEY  = 'wp_mariadb_vector_search_rebuild';
 	const SETTINGS_KEY = 'wp_mariadb_vector_search_settings';
 
 	/**
@@ -45,7 +44,6 @@ class Admin {
 		add_action( 'admin_menu', array( $this, 'add_menu' ) );
 		add_action( 'admin_post_' . self::ACTION_KEY, array( $this, 'handle_reindex' ) );
 		add_action( 'admin_post_' . self::SAVE_MODEL, array( $this, 'handle_save_model' ) );
-		add_action( 'admin_post_' . self::REBUILD_KEY, array( $this, 'handle_rebuild' ) );
 	}
 
 	/**
@@ -64,7 +62,17 @@ class Admin {
 	}
 
 	/**
-	 * Handle the reindex form submission.
+	 * Handle the unified reindex form submission.
+	 *
+	 * Behaviour depends on the relationship between the saved dimensions and the
+	 * current table schema:
+	 *
+	 *  - Dimensions match (normal case): non-destructive backfill. The table is left
+	 *    intact; each post's rows are replaced individually.
+	 *  - Dimensions differ: destructive rebuild. Requires the confirm_rebuild checkbox.
+	 *    Drops and recreates the table, then schedules a full force reindex.
+	 *  - Table not yet installed: creates the table at the saved dimensions and
+	 *    schedules a full reindex. No confirmation needed (nothing to lose).
 	 *
 	 * @return void
 	 */
@@ -75,8 +83,53 @@ class Admin {
 
 		check_admin_referer( self::ACTION_KEY );
 
-		$force = isset( $_POST['force'] ) && '1' === $_POST['force'];
-		$this->backfill->schedule( $force );
+		$settings    = get_option( self::SETTINGS_KEY, array() );
+		$saved_dims  = is_array( $settings ) && isset( $settings['dimensions'] ) ? (int) $settings['dimensions'] : Plugin::DEFAULT_DIMENSIONS;
+		$installed   = Schema::is_installed();
+		$table_dims  = $installed ? $this->repository->get_column_dimensions() : null;
+		$dim_changed = $installed && null !== $table_dims && $table_dims !== $saved_dims;
+
+		if ( $dim_changed ) {
+			// Dimensions differ: destructive rebuild requires confirmation.
+			if ( ! isset( $_POST['confirm_rebuild'] ) || '1' !== $_POST['confirm_rebuild'] ) {
+				wp_safe_redirect(
+					add_query_arg(
+						array(
+							'page'          => self::PAGE_SLUG,
+							'rebuild_error' => 'no_confirm',
+						),
+						admin_url( 'tools.php' )
+					)
+				);
+				exit;
+			}
+
+			Schema::drop();
+			delete_option( Schema::DB_VERSION_OPTION );
+			Schema::install( $saved_dims );
+			$this->backfill->schedule( true );
+
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'page'    => self::PAGE_SLUG,
+						'rebuilt' => '1',
+					),
+					admin_url( 'tools.php' )
+				)
+			);
+			exit;
+		}
+
+		if ( ! $installed ) {
+			// First install: create the table and schedule a full reindex.
+			Schema::install( $saved_dims );
+			$this->backfill->schedule( true );
+		} else {
+			// Normal non-destructive reindex.
+			$force = isset( $_POST['force'] ) && '1' === $_POST['force'];
+			$this->backfill->schedule( $force );
+		}
 
 		wp_safe_redirect(
 			add_query_arg(
@@ -94,7 +147,7 @@ class Admin {
 	 * Handle the save model form submission.
 	 *
 	 * Saves the selected provider/model to settings after probing the actual
-	 * embedding dimension. Does NOT touch the database table — use Rebuild for that.
+	 * embedding dimension. Does NOT touch the database table — use Reindex for that.
 	 *
 	 * @return void
 	 */
@@ -204,62 +257,14 @@ class Admin {
 	}
 
 	/**
-	 * Handle the rebuild form submission.
-	 *
-	 * Drops and recreates the embeddings table using the saved dimensions, then
-	 * schedules a force reindex of all posts.
-	 *
-	 * @return void
-	 */
-	public function handle_rebuild(): void {
-		if ( ! current_user_can( self::REINDEX_CAP ) ) {
-			wp_die( esc_html__( 'Insufficient permissions.', 'wp-mariadb-vector-search' ) );
-		}
-
-		check_admin_referer( self::REBUILD_KEY );
-
-		if ( ! isset( $_POST['confirm_rebuild'] ) || '1' !== $_POST['confirm_rebuild'] ) {
-			wp_safe_redirect(
-				add_query_arg(
-					array(
-						'page'          => self::PAGE_SLUG,
-						'rebuild_error' => 'no_confirm',
-					),
-					admin_url( 'tools.php' )
-				)
-			);
-			exit;
-		}
-
-		$settings   = get_option( self::SETTINGS_KEY, array() );
-		$dimensions = isset( $settings['dimensions'] ) ? (int) $settings['dimensions'] : Plugin::DEFAULT_DIMENSIONS;
-
-		Schema::drop();
-		delete_option( Schema::DB_VERSION_OPTION );
-		Schema::install( $dimensions );
-
-		$this->backfill->schedule( true );
-
-		wp_safe_redirect(
-			add_query_arg(
-				array(
-					'page'    => self::PAGE_SLUG,
-					'rebuilt' => '1',
-				),
-				admin_url( 'tools.php' )
-			)
-		);
-		exit;
-	}
-
-	/**
 	 * Render the admin page.
 	 *
 	 * @return void
 	 */
 	public function render_page(): void {
 		$is_supported = Schema::is_vector_supported();
-		$schema_ready = $is_supported && Schema::is_installed();
+		$installed    = Schema::is_installed();
+		$schema_ready = $is_supported && $installed;
 		$progress     = $this->backfill->get_progress();
 		$indexed      = $schema_ready ? $this->repository->count_indexed() : 0;
 		$settings     = get_option( self::SETTINGS_KEY, array() );
@@ -269,6 +274,7 @@ class Admin {
 		$cur_selected = '' !== $cur_provider && '' !== $cur_model ? $cur_provider . ':' . $cur_model : '';
 		$available    = $this->catalog->get_available_models();
 		$table_dims   = $schema_ready ? $this->repository->get_column_dimensions() : null;
+		$dim_changed  = $installed && null !== $table_dims && null !== $cur_dims && $table_dims !== $cur_dims;
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'MariaDB Vector Search', 'wp-mariadb-vector-search' ); ?></h1>
@@ -285,7 +291,7 @@ class Admin {
 				<div class="notice <?php echo '1' === $need_rebuild ? 'notice-warning' : 'notice-success'; ?> is-dismissible">
 					<p>
 					<?php if ( '1' === $need_rebuild ) : ?>
-						<?php esc_html_e( 'Model saved. The table dimension has changed — please run Rebuild index to recreate the table and reindex all posts.', 'wp-mariadb-vector-search' ); ?>
+						<?php esc_html_e( 'Model saved. The table dimension has changed — please run Reindex all posts to recreate the table.', 'wp-mariadb-vector-search' ); ?>
 					<?php else : ?>
 						<?php esc_html_e( 'Model saved. Please run Reindex all posts to apply the new model.', 'wp-mariadb-vector-search' ); ?>
 					<?php endif; ?>
@@ -416,36 +422,54 @@ class Admin {
 				</form>
 			<?php endif; ?>
 
-			<?php if ( $schema_ready ) : ?>
+			<?php if ( $is_supported ) : ?>
 				<h2><?php esc_html_e( 'Reindex', 'wp-mariadb-vector-search' ); ?></h2>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<input type="hidden" name="action" value="<?php echo esc_attr( self::ACTION_KEY ); ?>">
 					<?php wp_nonce_field( self::ACTION_KEY ); ?>
-					<p>
-						<label>
-							<input type="checkbox" name="force" value="1">
-							<?php esc_html_e( 'Force reindex (re-embed even unchanged posts)', 'wp-mariadb-vector-search' ); ?>
-						</label>
-					</p>
-					<?php submit_button( __( 'Reindex all posts', 'wp-mariadb-vector-search' ) ); ?>
+					<?php if ( $dim_changed ) : ?>
+						<p class="notice notice-warning inline">
+							<?php
+							echo esc_html(
+								sprintf(
+									/* translators: 1: saved model dimensions, 2: current table dimensions */
+									__( 'Selected model is %1$d-dim but the table is %2$d-dim. Reindexing will recreate the table and delete all existing vectors.', 'wp-mariadb-vector-search' ),
+									$cur_dims,
+									$table_dims
+								)
+							);
+							?>
+						</p>
+						<p>
+							<label>
+								<input type="checkbox" name="confirm_rebuild" value="1">
+								<?php esc_html_e( 'I understand that all existing vectors will be deleted.', 'wp-mariadb-vector-search' ); ?>
+							</label>
+						</p>
+					<?php elseif ( ! $installed ) : ?>
+						<p class="description">
+							<?php
+							$install_dims = null !== $cur_dims ? $cur_dims : Plugin::DEFAULT_DIMENSIONS;
+							echo esc_html(
+								sprintf(
+									/* translators: %d: number of vector dimensions */
+									__( 'The embeddings table will be created at %d dimensions.', 'wp-mariadb-vector-search' ),
+									$install_dims
+								)
+							);
+							?>
+						</p>
+					<?php else : ?>
+						<p>
+							<label>
+								<input type="checkbox" name="force" value="1">
+								<?php esc_html_e( 'Force reindex (re-embed even unchanged posts)', 'wp-mariadb-vector-search' ); ?>
+							</label>
+						</p>
+					<?php endif; ?>
+					<?php submit_button( __( 'Reindex all posts', 'wp-mariadb-vector-search' ), $dim_changed ? 'delete' : 'primary' ); ?>
 				</form>
 			<?php endif; ?>
-
-			<h2><?php esc_html_e( 'Rebuild index', 'wp-mariadb-vector-search' ); ?></h2>
-			<p class="description">
-				<?php esc_html_e( 'Drops and recreates the embeddings table using the saved model dimensions, then schedules a full reindex. All existing vectors will be deleted.', 'wp-mariadb-vector-search' ); ?>
-			</p>
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<input type="hidden" name="action" value="<?php echo esc_attr( self::REBUILD_KEY ); ?>">
-				<?php wp_nonce_field( self::REBUILD_KEY ); ?>
-				<p>
-					<label>
-						<input type="checkbox" name="confirm_rebuild" value="1">
-						<?php esc_html_e( 'I understand that all existing vectors will be deleted.', 'wp-mariadb-vector-search' ); ?>
-					</label>
-				</p>
-				<?php submit_button( __( 'Rebuild index', 'wp-mariadb-vector-search' ), 'delete' ); ?>
-			</form>
 		</div>
 		<?php
 	}
