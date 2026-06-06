@@ -3,7 +3,7 @@
  * Integration tests for the Search class.
  *
  * Requires MariaDB 11.7+ with VECTOR support.
- * Embedding_Client is stubbed via wp_mariadb_vector_search_embed.
+ * Embedding_Client is stubbed via anonymous subclass (no real HTTP calls).
  *
  * @package WP_MariaDB_Vector_Search
  */
@@ -64,6 +64,44 @@ class Search_Test extends \WP_UnitTestCase {
 	private $original_main_query;
 
 	/**
+	 * Build a stub Embedding_Client that returns fixed 4-dim vectors without HTTP calls.
+	 *
+	 * @return Embedding_Client
+	 */
+	private function make_stub_client(): Embedding_Client {
+		return new class() extends Embedding_Client {
+			/**
+			 * Return fixed 4-dimensional vectors.
+			 *
+			 * @param string[] $texts Texts to embed.
+			 * @return float[][]|\WP_Error
+			 */
+			public function embed( array $texts ): array|\WP_Error {
+				return array_map( static fn() => array( 1.0, 0.0, 0.0, 0.0 ), $texts );
+			}
+		};
+	}
+
+	/**
+	 * Build an Embedding_Client stub that always returns WP_Error.
+	 *
+	 * @return Embedding_Client
+	 */
+	private function make_error_client(): Embedding_Client {
+		return new class() extends Embedding_Client {
+			/**
+			 * Always return WP_Error.
+			 *
+			 * @param string[] $texts Texts to embed.
+			 * @return float[][]|\WP_Error
+			 */
+			public function embed( array $texts ): array|\WP_Error {
+				return new \WP_Error( 'api_error', 'Offline.' );
+			}
+		};
+	}
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function set_up(): void {
@@ -82,19 +120,9 @@ class Search_Test extends \WP_UnitTestCase {
 
 		$this->repository = new Repository();
 
-		// Register stub that returns a deterministic 4-dim vector.
-		add_filter(
-			'wp_mariadb_vector_search_embed',
-			static function ( $result, array $texts ) {
-				return array_map( static fn() => array( 1.0, 0.0, 0.0, 0.0 ), $texts );
-			},
-			10,
-			2
-		);
-
-		// Create and index two posts.
-		$client  = new Embedding_Client();
-		$indexer = new Indexer( $client, $this->repository );
+		// Create and index two posts with the stub client.
+		$stub_client = $this->make_stub_client();
+		$indexer     = new Indexer( $stub_client, $this->repository );
 
 		$this->post_a = $this->factory->post->create(
 			array(
@@ -114,7 +142,7 @@ class Search_Test extends \WP_UnitTestCase {
 		$indexer->index_post( $this->post_a );
 		$indexer->index_post( $this->post_b );
 
-		$this->search = new Search( new Embedding_Client(), $this->repository );
+		$this->search = new Search( $this->make_stub_client(), $this->repository );
 		$this->search->register_hooks();
 	}
 
@@ -122,7 +150,6 @@ class Search_Test extends \WP_UnitTestCase {
 	 * Tear down test fixtures.
 	 */
 	public function tear_down(): void {
-		remove_all_filters( 'wp_mariadb_vector_search_embed' );
 		remove_all_filters( 'pre_get_posts' );
 		remove_all_filters( 'posts_search' );
 		remove_all_actions( 'the_posts' );
@@ -221,11 +248,13 @@ class Search_Test extends \WP_UnitTestCase {
 
 	/** Search falls back gracefully when the embedding provider returns an error. */
 	public function test_search_falls_back_on_provider_error(): void {
-		remove_all_filters( 'wp_mariadb_vector_search_embed' );
-		add_filter(
-			'wp_mariadb_vector_search_embed',
-			static fn() => new \WP_Error( 'api_error', 'Offline.' )
-		);
+		// Replace the registered search hooks with an error-returning client.
+		remove_all_filters( 'pre_get_posts' );
+		remove_all_filters( 'posts_search' );
+		remove_all_actions( 'the_posts' );
+
+		$error_search = new Search( $this->make_error_client(), $this->repository );
+		$error_search->register_hooks();
 
 		$query = new \WP_Query(
 			array(

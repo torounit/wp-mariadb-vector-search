@@ -57,7 +57,7 @@ class Repository {
 	 *
 	 * @return int|null
 	 */
-	private function get_column_dimensions(): ?int {
+	public function get_column_dimensions(): ?int {
 		static $cache = array();
 
 		global $wpdb;
@@ -96,7 +96,6 @@ class Repository {
 	 * @param int    $post_id   Post ID.
 	 * @param string $post_type Post type slug.
 	 * @param string $hash      Content hash (sha256 of title+body).
-	 * @param string $model     Embedding model identifier.
 	 * @param array  $chunks    Array of chunk data. Each element must have:
 	 *                          'chunk_index' (int), 'chunk_text' (string),
 	 *                          'vector' (float[]).
@@ -106,7 +105,6 @@ class Repository {
 		int $post_id,
 		string $post_type,
 		string $hash,
-		string $model,
 		array $chunks
 	): void {
 		global $wpdb;
@@ -143,12 +141,11 @@ class Repository {
 			$ok = $wpdb->query(
 				$wpdb->prepare(
 					"INSERT INTO `{$table}`
-					(post_id, chunk_index, post_type, model, dimensions, embedding, chunk_text, content_hash, updated_at)
-					VALUES (%d, %d, %s, %s, %d, VEC_FromText(%s), %s, %s, %s)",
+					(post_id, chunk_index, post_type, dimensions, embedding, chunk_text, content_hash, updated_at)
+					VALUES (%d, %d, %s, %d, VEC_FromText(%s), %s, %s, %s)",
 					$post_id,
 					$chunk['chunk_index'],
 					$post_type,
-					$model,
 					$dims,
 					$vec_literal,
 					$chunk['chunk_text'],

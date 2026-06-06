@@ -78,7 +78,6 @@ class Repository_Test extends \WP_UnitTestCase {
 			1,
 			'post',
 			'hash1',
-			'model',
 			array(
 				array(
 					'chunk_index' => 0,
@@ -103,8 +102,8 @@ class Repository_Test extends \WP_UnitTestCase {
 			'chunk_text'  => 'Hello',
 			'vector'      => array( 1.0, 0.0, 0.0, 0.0 ),
 		);
-		$this->repository->replace_post_chunks( 1, 'post', 'hash1', 'model', array( $chunk ) );
-		$this->repository->replace_post_chunks( 1, 'post', 'hash2', 'model', array( $chunk ) );
+		$this->repository->replace_post_chunks( 1, 'post', 'hash1', array( $chunk ) );
+		$this->repository->replace_post_chunks( 1, 'post', 'hash2', array( $chunk ) );
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}` WHERE post_id = 1" );
@@ -120,7 +119,6 @@ class Repository_Test extends \WP_UnitTestCase {
 			42,
 			'post',
 			'abc123',
-			'model',
 			array(
 				array(
 					'chunk_index' => 0,
@@ -148,7 +146,6 @@ class Repository_Test extends \WP_UnitTestCase {
 			5,
 			'post',
 			'h',
-			'model',
 			array(
 				array(
 					'chunk_index' => 0,
@@ -180,7 +177,6 @@ class Repository_Test extends \WP_UnitTestCase {
 			7,
 			'post',
 			'myhash',
-			'model',
 			array(
 				array(
 					'chunk_index' => 0,
@@ -209,7 +205,6 @@ class Repository_Test extends \WP_UnitTestCase {
 			1,
 			'post',
 			'h1',
-			'model',
 			array(
 				array(
 					'chunk_index' => 0,
@@ -223,7 +218,6 @@ class Repository_Test extends \WP_UnitTestCase {
 			2,
 			'post',
 			'h2',
-			'model',
 			array(
 				array(
 					'chunk_index' => 0,
@@ -247,7 +241,6 @@ class Repository_Test extends \WP_UnitTestCase {
 				$i,
 				'post',
 				"h{$i}",
-				'model',
 				array(
 					array(
 						'chunk_index' => 0,
@@ -268,7 +261,6 @@ class Repository_Test extends \WP_UnitTestCase {
 			10,
 			'post',
 			'h10',
-			'model',
 			array(
 				array(
 					'chunk_index' => 0,
@@ -281,7 +273,6 @@ class Repository_Test extends \WP_UnitTestCase {
 			11,
 			'page',
 			'h11',
-			'model',
 			array(
 				array(
 					'chunk_index' => 0,
@@ -303,7 +294,6 @@ class Repository_Test extends \WP_UnitTestCase {
 			1,
 			'post',
 			'h1',
-			'model',
 			array(
 				array(
 					'chunk_index' => 0,
@@ -322,7 +312,6 @@ class Repository_Test extends \WP_UnitTestCase {
 			2,
 			'post',
 			'h2',
-			'model',
 			array(
 				array(
 					'chunk_index' => 0,

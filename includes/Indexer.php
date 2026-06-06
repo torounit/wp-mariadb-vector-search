@@ -19,13 +19,6 @@ namespace WP_MariaDB_Vector_Search;
 class Indexer {
 
 	/**
-	 * Fallback label stored in the model column when the SDK cannot resolve a model id.
-	 * Under normal operation this constant is not used; the real model id is obtained
-	 * from Embedding_Client::embed() via the $model out-parameter.
-	 */
-	private const MODEL = 'wp-ai-connector';
-
-	/**
 	 * Constructor.
 	 *
 	 * @param Embedding_Client $client     Embedding provider wrapper.
@@ -64,9 +57,8 @@ class Indexer {
 			return;
 		}
 
-		$texts       = $this->chunker->chunk( $post->post_content, $post->post_title );
-		$model_label = null;
-		$result      = $this->client->embed( $texts, $model_label );
+		$texts  = $this->chunker->chunk( $post->post_content, $post->post_title );
+		$result = $this->client->embed( $texts );
 
 		if ( is_wp_error( $result ) ) {
 			wp_mariadb_vector_search_log(
@@ -103,7 +95,6 @@ class Indexer {
 			$post_id,
 			$post->post_type,
 			$hash,
-			( is_string( $model_label ) && '' !== $model_label ) ? $model_label : self::MODEL,
 			$chunks
 		);
 	}

@@ -17,7 +17,7 @@ namespace WP_MariaDB_Vector_Search;
  */
 class Schema {
 
-	const DB_VERSION        = '1';
+	const DB_VERSION        = '2';
 	const DB_VERSION_OPTION = 'wp_mariadb_vector_search_db_version';
 
 	/**
@@ -46,7 +46,6 @@ class Schema {
 				`post_id`      BIGINT UNSIGNED NOT NULL,
 				`chunk_index`  SMALLINT UNSIGNED NOT NULL,
 				`post_type`    VARCHAR(20) NOT NULL,
-				`model`        VARCHAR(64) NOT NULL,
 				`dimensions`   SMALLINT UNSIGNED NOT NULL,
 				`embedding`    VECTOR({$dimensions}) NOT NULL,
 				`chunk_text`   TEXT NOT NULL,

@@ -59,6 +59,10 @@ class Embedding_Prompt_Builder_Test extends \WP_UnitTestCase {
 
 		$registry = $this->createMock( ProviderRegistry::class );
 		$registry->method( 'findModelsMetadataForSupport' )->willReturn( array( $pmc ) );
+		// hasProvider returns true for the registered provider so is_provider_usable() passes.
+		$registry->method( 'hasProvider' )->willReturnCallback(
+			static fn( $p ) => $p === $provider_id
+		);
 
 		if ( '' !== $provider_class_name ) {
 			$registry->method( 'getProviderClassName' )->willReturn( $provider_class_name );
@@ -90,18 +94,38 @@ class Embedding_Prompt_Builder_Test extends \WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * Tear down: clean up any settings written during tests.
+	 */
+	public function tear_down(): void {
+		delete_option( 'wp_mariadb_vector_search_settings' );
+		parent::tear_down();
+	}
+
 	// -----------------------------------------------------------------------
 	// No authentication / no configured provider
 	// -----------------------------------------------------------------------
 
 	/**
-	 * Returns WP_Error when capability detection fails AND the fallback provider is not registered.
+	 * Returns WP_Error when no settings and capability detection finds nothing.
 	 */
 	public function test_generate_returns_wp_error_when_no_configured_provider(): void {
 		$registry = $this->createMock( ProviderRegistry::class );
 		$registry->method( 'findModelsMetadataForSupport' )->willReturn( array() );
-		// hasProvider returns false (mock default) → fallback provider unusable → no_authentication.
-		$registry->method( 'hasProvider' )->willReturn( false );
+
+		$builder = new Embedding_Prompt_Builder( null, null, null, $registry );
+		$result  = $builder->generate_embeddings_result( array( 'hello' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'no_authentication', $result->get_error_code() );
+	}
+
+	/**
+	 * Returns WP_Error when auto-detection returns nothing and no settings are saved.
+	 */
+	public function test_returns_error_when_discovery_empty_and_no_settings(): void {
+		$registry = $this->createMock( ProviderRegistry::class );
+		$registry->method( 'findModelsMetadataForSupport' )->willReturn( array() );
 
 		$builder = new Embedding_Prompt_Builder( null, null, null, $registry );
 		$result  = $builder->generate_embeddings_result( array( 'hello' ) );
@@ -111,17 +135,23 @@ class Embedding_Prompt_Builder_Test extends \WP_UnitTestCase {
 	}
 
 	// -----------------------------------------------------------------------
-	// Fixed-default fallback (capability detection fails)
+	// Settings-selected model (highest priority)
 	// -----------------------------------------------------------------------
 
 	/**
-	 * When capability detection returns no candidates, falls back to the fixed default
-	 * (openai / text-embedding-3-small) and successfully returns vectors.
+	 * When settings contains provider/model, it takes priority over auto-detected models.
 	 */
-	public function test_falls_back_to_fixed_default_when_discovery_empty(): void {
-		$payload  = (string) wp_json_encode(
-			array( 'data' => array( array( 'embedding' => array( 0.1, 0.2 ) ) ) )
+	public function test_settings_model_takes_priority_over_auto_detect(): void {
+		// Settings specifies ada-002; auto-detect would yield text-embedding-3-small.
+		update_option(
+			'wp_mariadb_vector_search_settings',
+			array(
+				'provider' => 'openai',
+				'model'    => 'text-embedding-ada-002',
+			)
 		);
+
+		$payload  = (string) wp_json_encode( array( 'data' => array( array( 'embedding' => array( 0.1 ) ) ) ) );
 		$response = new Response( 200, array(), $payload );
 
 		$transport = $this->createMock( HttpTransporterInterface::class );
@@ -131,121 +161,56 @@ class Embedding_Prompt_Builder_Test extends \WP_UnitTestCase {
 				$this->callback(
 					static function ( Request $req ): bool {
 						$body = json_decode( (string) $req->getBody(), true );
-						return 'text-embedding-3-small' === ( $body['model'] ?? '' );
+						// Settings model must win over the auto-detected text-embedding-3-small.
+						return 'text-embedding-ada-002' === ( $body['model'] ?? '' );
 					}
 				)
 			)
 			->willReturn( $response );
 
-		$registry = $this->createMock( ProviderRegistry::class );
-		$registry->method( 'findModelsMetadataForSupport' )->willReturn( array() );
-		$registry->method( 'hasProvider' )->with( 'openai' )->willReturn( true );
-
-		$builder = new Embedding_Prompt_Builder( null, $transport, $this->make_auth(), $registry );
+		// Registry auto-detects text-embedding-3-small, but settings wins.
+		$builder = $this->make_builder( $transport, 'openai', 'text-embedding-3-small' );
 		$result  = $builder->generate_embeddings_result( array( 'hello' ) );
 
 		$this->assertInstanceOf( GenerativeAiResult::class, $result );
 		assert( $result instanceof GenerativeAiResult );
-		$embeddings = $result->getAdditionalData()['embeddings'];
-		$this->assertSame( array( array( 0.1, 0.2 ) ), $embeddings );
+		$this->assertSame( 'text-embedding-ada-002', $result->getModelMetadata()->getId() );
 	}
 
 	/**
-	 * The wp_mariadb_vector_search_embedding_model filter can override the fallback model.
+	 * When settings provider is not usable, falls through to auto-detection.
 	 */
-	public function test_filter_can_override_fallback_model(): void {
-		$payload  = (string) wp_json_encode(
-			array( 'data' => array( array( 'embedding' => array( 0.5 ) ) ) )
+	public function test_settings_model_falls_through_when_provider_not_usable(): void {
+		update_option(
+			'wp_mariadb_vector_search_settings',
+			array(
+				'provider' => 'unknown-provider',
+				'model'    => 'some-model',
+			)
 		);
+
+		$payload  = (string) wp_json_encode( array( 'data' => array( array( 'embedding' => array( 0.5 ) ) ) ) );
 		$response = new Response( 200, array(), $payload );
 
 		$transport = $this->createMock( HttpTransporterInterface::class );
-		$transport->expects( $this->once() )
-			->method( 'send' )
-			->with(
-				$this->callback(
-					static function ( Request $req ): bool {
-						$body = json_decode( (string) $req->getBody(), true );
-						return 'text-embedding-3-large' === ( $body['model'] ?? '' );
-					}
-				)
-			)
-			->willReturn( $response );
+		$transport->method( 'send' )->willReturn( $response );
 
-		$registry = $this->createMock( ProviderRegistry::class );
-		$registry->method( 'findModelsMetadataForSupport' )->willReturn( array() );
-		$registry->method( 'hasProvider' )->willReturn( true );
-
-		add_filter(
-			'wp_mariadb_vector_search_embedding_model',
-			static function (): array {
-				return array(
-					'provider' => 'openai',
-					'model'    => 'text-embedding-3-large',
-				);
-			}
-		);
-
-		$builder = new Embedding_Prompt_Builder( null, $transport, $this->make_auth(), $registry );
+		// Registry detects openai/text-embedding-3-small as the fallback.
+		// hasProvider for 'unknown-provider' returns false (mock default), so is_provider_usable → false.
+		$builder = $this->make_builder( $transport, 'openai', 'text-embedding-3-small' );
 		$result  = $builder->generate_embeddings_result( array( 'hello' ) );
 
-		remove_all_filters( 'wp_mariadb_vector_search_embedding_model' );
-
 		$this->assertInstanceOf( GenerativeAiResult::class, $result );
+		assert( $result instanceof GenerativeAiResult );
+		// Auto-detected model was used.
+		$this->assertSame( 'text-embedding-3-small', $result->getModelMetadata()->getId() );
 	}
 
 	/**
-	 * When the filter returns a dimensions key, that value is forwarded in the request body.
+	 * Request body does not include a dimensions key (dimensions feature removed).
 	 */
-	public function test_filter_dimensions_forwarded_in_request_body(): void {
-		$payload  = (string) wp_json_encode(
-			array( 'data' => array( array( 'embedding' => array( 0.1, 0.2 ) ) ) )
-		);
-		$response = new Response( 200, array(), $payload );
-
-		$transport = $this->createMock( HttpTransporterInterface::class );
-		$transport->expects( $this->once() )
-			->method( 'send' )
-			->with(
-				$this->callback(
-					static function ( Request $req ): bool {
-						$body = json_decode( (string) $req->getBody(), true );
-						return 768 === ( $body['dimensions'] ?? null );
-					}
-				)
-			)
-			->willReturn( $response );
-
-		$registry = $this->createMock( ProviderRegistry::class );
-		$registry->method( 'findModelsMetadataForSupport' )->willReturn( array() );
-		$registry->method( 'hasProvider' )->willReturn( true );
-
-		add_filter(
-			'wp_mariadb_vector_search_embedding_model',
-			static function (): array {
-				return array(
-					'provider'   => 'openai',
-					'model'      => 'text-embedding-3-small',
-					'dimensions' => 768,
-				);
-			}
-		);
-
-		$builder = new Embedding_Prompt_Builder( null, $transport, $this->make_auth(), $registry );
-		$result  = $builder->generate_embeddings_result( array( 'hello' ) );
-
-		remove_all_filters( 'wp_mariadb_vector_search_embedding_model' );
-
-		$this->assertInstanceOf( GenerativeAiResult::class, $result );
-	}
-
-	/**
-	 * When dimensions is not specified in the filter, the request body does not include it.
-	 */
-	public function test_no_dimensions_key_when_filter_omits_it(): void {
-		$payload  = (string) wp_json_encode(
-			array( 'data' => array( array( 'embedding' => array( 0.1 ) ) ) )
-		);
+	public function test_request_body_does_not_include_dimensions(): void {
+		$payload  = (string) wp_json_encode( array( 'data' => array( array( 'embedding' => array( 0.1 ) ) ) ) );
 		$response = new Response( 200, array(), $payload );
 
 		$transport = $this->createMock( HttpTransporterInterface::class );
@@ -261,29 +226,7 @@ class Embedding_Prompt_Builder_Test extends \WP_UnitTestCase {
 			)
 			->willReturn( $response );
 
-		$registry = $this->createMock( ProviderRegistry::class );
-		$registry->method( 'findModelsMetadataForSupport' )->willReturn( array() );
-		$registry->method( 'hasProvider' )->willReturn( true );
-
-		$builder = new Embedding_Prompt_Builder( null, $transport, $this->make_auth(), $registry );
-		$builder->generate_embeddings_result( array( 'hello' ) );
-	}
-
-	/**
-	 * Returns WP_Error when capability detection fails AND the fallback provider is not configured.
-	 */
-	public function test_returns_error_when_discovery_empty_and_fallback_not_configured(): void {
-		$registry = $this->createMock( ProviderRegistry::class );
-		$registry->method( 'findModelsMetadataForSupport' )->willReturn( array() );
-		$registry->method( 'hasProvider' )->willReturn( true );
-		$registry->method( 'isProviderConfigured' )->willReturn( false );
-
-		// No injected auth — so isProviderConfigured is checked and returns false.
-		$builder = new Embedding_Prompt_Builder( null, null, null, $registry );
-		$result  = $builder->generate_embeddings_result( array( 'hello' ) );
-
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'no_authentication', $result->get_error_code() );
+		$this->make_builder( $transport )->generate_embeddings_result( array( 'hello' ) );
 	}
 
 	// -----------------------------------------------------------------------

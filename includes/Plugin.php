@@ -49,7 +49,8 @@ class Plugin {
 		$indexer    = new Indexer( $client, $repository );
 		$backfill   = new Cron_Backfill( $indexer );
 		$search     = new Search( $client, $repository );
-		$admin      = new Admin( $backfill, $repository );
+		$catalog    = Model_Catalog::create();
+		$admin      = new Admin( $backfill, $repository, $catalog, $client );
 
 		// Index posts on save / delete.
 		add_action( 'save_post', array( $indexer, 'index_post' ) );

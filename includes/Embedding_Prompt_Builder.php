@@ -87,59 +87,50 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 	 * Generate text embeddings for a batch of texts.
 	 *
 	 * Resolution order:
-	 *  1. Capability auto-detection via the provider registry — used when a provider
+	 *  1. Settings-selected model — when wp_mariadb_vector_search_settings has both
+	 *     'provider' and 'model' keys and the provider is usable.
+	 *  2. Capability auto-detection via the provider registry — used when a provider
 	 *     declares embeddingGeneration support.
-	 *  2. Fixed default fallback (filterable) — used when auto-detection finds no
-	 *     candidates (e.g. the OpenAI provider plugin does not tag embedding models
-	 *     with embeddingGeneration capability). Default: openai / text-embedding-3-small.
-	 *     Override via the wp_mariadb_vector_search_embedding_model filter.
+	 *  3. WP_Error — returned when neither source yields a usable provider.
 	 *
 	 * @param string[] $texts Non-empty array of strings to embed.
 	 * @return GenerativeAiResult|\WP_Error Result with embeddings in additionalData, or WP_Error on failure.
 	 */
 	public function generate_embeddings_result( array $texts ): GenerativeAiResult|\WP_Error {
-		$requirements = new ModelRequirements(
-			array( CapabilityEnum::embeddingGeneration() ),
-			array()
-		);
+		// 1. Settings-selected model (highest priority).
+		$settings   = get_option( 'wp_mariadb_vector_search_settings', array() );
+		$s_provider = is_array( $settings ) ? (string) ( $settings['provider'] ?? '' ) : '';
+		$s_model    = is_array( $settings ) ? (string) ( $settings['model'] ?? '' ) : '';
 
-		$candidates = $this->registry->findModelsMetadataForSupport( $requirements );
-		$dimensions = null;
-
-		if ( ! empty( $candidates ) ) {
-			// Auto-detection succeeded: use the first capable provider/model.
-			$provider_metadata = $candidates[0]->getProvider();
-			$model_metadata    = $candidates[0]->getModels()[0];
-		} else {
-			// Auto-detection failed: fall back to the fixed default (filterable).
-			$selection  = apply_filters(
-				'wp_mariadb_vector_search_embedding_model',
-				array(
-					'provider' => 'openai',
-					'model'    => 'text-embedding-3-small',
-				)
+		if ( '' !== $s_provider && '' !== $s_model && $this->is_provider_usable( $s_provider ) ) {
+			$provider_metadata = new ProviderMetadata( $s_provider, $s_provider, ProviderTypeEnum::cloud() );
+			$model_metadata    = new ModelMetadata(
+				$s_model,
+				$s_model,
+				array( CapabilityEnum::embeddingGeneration() ),
+				array()
 			);
-			$provider   = is_array( $selection ) ? (string) ( $selection['provider'] ?? '' ) : '';
-			$model      = is_array( $selection ) ? (string) ( $selection['model'] ?? '' ) : '';
-			$dimensions = is_array( $selection ) && isset( $selection['dimensions'] ) ? (int) $selection['dimensions'] : null;
+		} else {
+			// 2. Capability auto-detection.
+			$requirements = new ModelRequirements(
+				array( CapabilityEnum::embeddingGeneration() ),
+				array()
+			);
+			$candidates   = $this->registry->findModelsMetadataForSupport( $requirements );
 
-			if ( '' === $provider || '' === $model || ! $this->is_provider_usable( $provider ) ) {
+			if ( ! empty( $candidates ) ) {
+				$provider_metadata = $candidates[0]->getProvider();
+				$model_metadata    = $candidates[0]->getModels()[0];
+			} else {
+				// 3. No usable provider found.
 				return new \WP_Error(
 					'no_authentication',
 					__( 'No configured embedding provider found. Configure one in Settings > General > AI Connector.', 'wp-mariadb-vector-search' )
 				);
 			}
-
-			$provider_metadata = new ProviderMetadata( $provider, $provider, ProviderTypeEnum::cloud() );
-			$model_metadata    = new ModelMetadata(
-				$model,
-				$model,
-				array( CapabilityEnum::embeddingGeneration() ),
-				array()
-			);
 		}
 
-		$vectors = $this->try_provider( $texts, $provider_metadata->getId(), $model_metadata->getId(), $dimensions );
+		$vectors = $this->try_provider( $texts, $provider_metadata->getId(), $model_metadata->getId() );
 
 		if ( is_wp_error( $vectors ) ) {
 			return $vectors;
@@ -190,13 +181,12 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 	/**
 	 * Attempt embedding generation for a single [provider, model] pair.
 	 *
-	 * @param string[] $texts      Texts to embed.
-	 * @param string   $provider   Provider id.
-	 * @param string   $model      Model name.
-	 * @param int|null $dimensions Optional output dimension count (OpenAI text-embedding-3-* only).
+	 * @param string[] $texts    Texts to embed.
+	 * @param string   $provider Provider id.
+	 * @param string   $model    Model name.
 	 * @return float[][]|\WP_Error
 	 */
-	private function try_provider( array $texts, string $provider, string $model, ?int $dimensions = null ): array|\WP_Error {
+	private function try_provider( array $texts, string $provider, string $model ): array|\WP_Error {
 		$auth = $this->resolve_auth( $provider );
 
 		if ( is_wp_error( $auth ) ) {
@@ -204,7 +194,7 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 		}
 
 		try {
-			$request   = $auth->authenticateRequest( $this->build_request( $texts, $provider, $model, $dimensions ) );
+			$request   = $auth->authenticateRequest( $this->build_request( $texts, $provider, $model ) );
 			$transport = $this->transport ?? HttpTransporterFactory::createTransporter();
 			$response  = $transport->send( $request );
 			ResponseUtil::throwIfNotSuccessful( $response );
@@ -256,16 +246,15 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 	/**
 	 * Build the provider-specific HTTP Request DTO.
 	 *
-	 * @param string[] $texts      Texts to embed.
-	 * @param string   $provider   Provider id.
-	 * @param string   $model      Model name.
-	 * @param int|null $dimensions Optional output dimension count.
+	 * @param string[] $texts    Texts to embed.
+	 * @param string   $provider Provider id.
+	 * @param string   $model    Model name.
 	 * @return Request
 	 */
-	private function build_request( array $texts, string $provider, string $model, ?int $dimensions = null ): Request {
+	private function build_request( array $texts, string $provider, string $model ): Request {
 		return ( 'google' === $provider )
 			? $this->build_google_request( $texts, $provider, $model )
-			: $this->build_openai_request( $texts, $provider, $model, $dimensions );
+			: $this->build_openai_request( $texts, $provider, $model );
 	}
 
 	/**
@@ -287,21 +276,16 @@ class Embedding_Prompt_Builder extends \WP_AI_Client_Prompt_Builder {
 	/**
 	 * Build an OpenAI /v1/embeddings request.
 	 *
-	 * @param string[] $texts      Texts to embed.
-	 * @param string   $provider   Provider id.
-	 * @param string   $model      Model name.
-	 * @param int|null $dimensions Optional output dimension count; supported by text-embedding-3-* models.
+	 * @param string[] $texts    Texts to embed.
+	 * @param string   $provider Provider id.
+	 * @param string   $model    Model name.
 	 * @return Request
 	 */
-	private function build_openai_request( array $texts, string $provider, string $model, ?int $dimensions = null ): Request {
+	private function build_openai_request( array $texts, string $provider, string $model ): Request {
 		$body = array(
 			'model' => $model,
 			'input' => $texts,
 		);
-
-		if ( null !== $dimensions ) {
-			$body['dimensions'] = $dimensions;
-		}
 
 		return new Request(
 			HttpMethodEnum::POST(),

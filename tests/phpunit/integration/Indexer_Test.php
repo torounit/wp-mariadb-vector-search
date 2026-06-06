@@ -3,7 +3,8 @@
  * Integration tests for the Indexer class.
  *
  * Requires MariaDB 11.7+ with VECTOR support.
- * The Embedding_Client is stubbed via wp_mariadb_vector_search_embed.
+ * The Embedding_Client is stubbed via an anonymous subclass that returns
+ * fixed vectors without needing a real AI provider.
  *
  * @package WP_MariaDB_Vector_Search
  */
@@ -42,6 +43,25 @@ class Indexer_Test extends \WP_UnitTestCase {
 	private const DIMS = 4;
 
 	/**
+	 * Build a stub Embedding_Client that returns fixed 4-dim vectors without HTTP calls.
+	 *
+	 * @return Embedding_Client
+	 */
+	private function make_stub_client(): Embedding_Client {
+		return new class() extends Embedding_Client {
+			/**
+			 * Return fixed 4-dimensional vectors for every input text.
+			 *
+			 * @param string[] $texts Texts to embed.
+			 * @return float[][]|\WP_Error
+			 */
+			public function embed( array $texts ): array|\WP_Error {
+				return array_map( static fn() => array( 0.5, 0.5, 0.5, 0.5 ), $texts );
+			}
+		};
+	}
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function set_up(): void {
@@ -59,34 +79,13 @@ class Indexer_Test extends \WP_UnitTestCase {
 		Schema::install( self::DIMS );
 
 		$this->repository = new Repository();
-		$client           = new Embedding_Client();
-		$this->indexer    = new Indexer( $client, $this->repository );
-
-		// Register stub provider: returns fixed 4-dim vectors.
-		add_filter(
-			'wp_mariadb_vector_search_embed',
-			static function ( $result, array $texts ) {
-				return array_map( static fn() => array( 0.5, 0.5, 0.5, 0.5 ), $texts );
-			},
-			10,
-			2
-		);
-
-		// Stub model name surfaced via the embed_model filter.
-		add_filter(
-			'wp_mariadb_vector_search_embed_model',
-			static function () {
-				return 'stub-model';
-			}
-		);
+		$this->indexer    = new Indexer( $this->make_stub_client(), $this->repository );
 	}
 
 	/**
 	 * Tear down test fixtures.
 	 */
 	public function tear_down(): void {
-		remove_all_filters( 'wp_mariadb_vector_search_embed' );
-		remove_all_filters( 'wp_mariadb_vector_search_embed_model' );
 		Schema::drop();
 		delete_option( 'wp_mariadb_vector_search_db_version' );
 		add_filter( 'query', array( $this, '_create_temporary_tables' ) );
@@ -212,30 +211,6 @@ class Indexer_Test extends \WP_UnitTestCase {
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$this->assertSame( 0, $count );
-	}
-
-	/** The model column stores the model id surfaced by the embed_model filter. */
-	public function test_index_post_stores_model(): void {
-		global $wpdb;
-		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
-
-		$post_id = $this->factory->post->create(
-			array(
-				'post_title'   => 'Model Test',
-				'post_content' => 'Content to embed.',
-				'post_status'  => 'publish',
-			)
-		);
-
-		$this->indexer->index_post( $post_id );
-
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-		$model = $wpdb->get_var(
-			$wpdb->prepare( "SELECT model FROM `{$table}` WHERE post_id = %d LIMIT 1", $post_id )
-		);
-		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-
-		$this->assertSame( 'stub-model', $model );
 	}
 
 	/** Draft posts are not indexed. */
