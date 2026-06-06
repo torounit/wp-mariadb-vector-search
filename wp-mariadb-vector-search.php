@@ -28,6 +28,10 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 	require_once __DIR__ . '/vendor/autoload.php';
 }
 
+if ( file_exists( __DIR__ . '/build/build.php' ) ) {
+	require_once __DIR__ . '/build/build.php';
+}
+
 /**
  * Create an Embedding_Prompt_Builder for building embedding requests.
  *

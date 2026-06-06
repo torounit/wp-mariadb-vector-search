@@ -1,0 +1,24 @@
+{
+	"$schema": "https://json.schemastore.org/tsconfig.json",
+	"compilerOptions": {
+		"allowJs": false,
+		"strict": true,
+		"allowSyntheticDefaultImports": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"module": "nodenext",
+		"resolveJsonModule": true,
+		"declaration": true,
+		"sourceMap": true,
+		"esModuleInterop": false,
+		"forceConsistentCasingInFileNames": true,
+		"isolatedModules": true,
+		"verbatimModuleSyntax": false,
+		"jsx": "react-jsx",
+		"lib": [ "ES2022", "DOM.Iterable", "DOM" ],
+		"target": "ES2022",
+		"skipLibCheck": true
+	},
+	"include": [ "routes/**/*.ts", "routes/**/*.tsx", "src/**/*.ts", "src/**/*.tsx" ],
+	"exclude": [ "build", "node_modules", "vendor" ]
+}

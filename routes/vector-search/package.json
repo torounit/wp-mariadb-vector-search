@@ -1,0 +1,19 @@
+{
+	"name": "@wp-mariadb-vector-search/vector-search-route",
+	"version": "1.0.0",
+	"private": true,
+	"route": {
+		"path": "/",
+		"page": [
+			"wp-mariadb-vector-search"
+		]
+	},
+	"dependencies": {
+		"@wordpress/admin-ui": "*",
+		"@wordpress/api-fetch": "*",
+		"@wordpress/components": "*",
+		"@wordpress/element": "*",
+		"@wordpress/i18n": "*",
+		"@wordpress/notices": "*"
+	}
+}
