@@ -65,10 +65,6 @@ class Admin {
 			echo '</p></div></div>';
 			return;
 		}
-		?>
-		<div class="wrap">
-			<div id="wp-mariadb-vector-search-wp-admin-app" class="boot-layout-container"></div>
-		</div>
-		<?php
+		wp_mariadb_vector_search_wp_mariadb_vector_search_wp_admin_render_page();
 	}
 }

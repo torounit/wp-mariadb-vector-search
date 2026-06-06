@@ -40,7 +40,9 @@ export function VectorSearchApp() {
 	}, [] );
 
 	return (
-		<Page title={ __( 'Vector Search', 'wp-mariadb-vector-search' ) }>
+		<Page
+			hasPadding
+			title={ __( 'Vector Search', 'wp-mariadb-vector-search' ) }>
 			{ successMessage && (
 				<Notice
 					status="success"
