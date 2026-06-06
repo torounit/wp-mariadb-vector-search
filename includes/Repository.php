@@ -51,6 +51,43 @@ class Repository {
 	// -----------------------------------------------------------------------
 
 	/**
+	 * Return the declared dimension of the embedding VECTOR column, or null on error.
+	 *
+	 * Result is cached in a static variable so it is only queried once per request.
+	 *
+	 * @return int|null
+	 */
+	private function get_column_dimensions(): ?int {
+		static $cache = array();
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
+
+		if ( array_key_exists( $table, $cache ) ) {
+			return $cache[ $table ];
+		}
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$col_type = $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+				WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s AND COLUMN_NAME = %s',
+				$table,
+				'embedding'
+			)
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		$dims = null;
+		if ( is_string( $col_type ) && preg_match( '/vector\((\d+)\)/i', $col_type, $m ) ) {
+			$dims = (int) $m[1];
+		}
+
+		$cache[ $table ] = $dims;
+		return $dims;
+	}
+
+	/**
 	 * Insert or replace all chunks for a post atomically.
 	 *
 	 * Deletes any existing rows for $post_id first so that stale chunks from
@@ -76,6 +113,21 @@ class Repository {
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
 		$now   = current_time( 'mysql', true );
 		$dims  = count( $chunks[0]['vector'] );
+
+		$declared = $this->get_column_dimensions();
+		if ( null !== $declared && $declared !== $dims ) {
+			wp_mariadb_vector_search_log(
+				sprintf(
+					'replace_post_chunks(%d): dimension mismatch — embedding is %d-dim but table column is VECTOR(%d). ' .
+					'Set dimensions to %d in Settings and reinstall the schema (delete the wp_mariadb_vector_search_db_version option).',
+					$post_id,
+					$dims,
+					$declared,
+					$dims
+				)
+			);
+			return;
+		}
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$del = $wpdb->query( $wpdb->prepare( "DELETE FROM `{$table}` WHERE post_id = %d", $post_id ) );
