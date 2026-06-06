@@ -43,16 +43,15 @@ save_post ──► Indexer::enqueue (wp_schedule_single_event)
 is_search() ──► Search::pre_get_posts
                 │  query string → Embedding_Client::embed (1 chunk)
                 ▼
-        Repository::knn(query_vec, k) → post__in (ordered)
+        Repository::search_similar(query_vec, post_types, max_distance, max_results) → post__in (ordered)
 ```
 
 ### Design decisions
 
-- **All AI calls go through one wrapper.** `Embedding_Client` is the only
-  class that talks to the WP 7.0 AI Connector. Indexer and Search depend on
-  this wrapper, not on the connector directly, so provider/API shifts are
-  isolated. A filter `wp_mariadb_vector_search_embed` is exposed as an
-  escape hatch for custom backends.
+- **All AI calls go through one wrapper.** `Embedding_Client` is a thin wrapper;
+  it delegates to `Embedding_Prompt_Builder` for provider/model resolution and
+  HTTP requests. Indexer and Search depend on this wrapper, not on the connector
+  directly, so provider/API shifts are isolated.
 - **Chunking, one post → N vectors.** Long posts lose information when
   truncated to a model's token limit, so we split them. Storage is per-chunk;
   search aggregates back to posts via `MIN(distance)`.
@@ -74,7 +73,6 @@ CREATE TABLE {$prefix}mariadb_vector_embeddings (
   post_id      BIGINT UNSIGNED NOT NULL,
   chunk_index  SMALLINT UNSIGNED NOT NULL,
   post_type    VARCHAR(20)       NOT NULL,
-  model        VARCHAR(64)       NOT NULL,
   dimensions   SMALLINT UNSIGNED NOT NULL,
   embedding    VECTOR(:N)        NOT NULL,
   chunk_text   TEXT              NOT NULL,
@@ -88,36 +86,39 @@ CREATE TABLE {$prefix}mariadb_vector_embeddings (
 
 `:N` is fixed at install time from the chosen model
 (e.g. OpenAI `text-embedding-3-small` = 1536, Google `text-embedding-004` = 768).
-Changing the model later requires dropping and re-creating the table; the model
-name is stored per row so partial migrations are possible.
+Changing the model to one with a different dimension requires dropping and
+re-creating the table; the Admin page handles this automatically.
 
 `content_hash` is `sha256(title + "\n\n" + raw_content)` — used by the indexer
 to skip work when the post body has not changed.
 
 ## Components
 
-| File                                          | Responsibility                                                                                     |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `wp-mariadb-vector-search.php`                | Bootstrap. Defines `WP_MARIADB_VECTOR_SEARCH_VERSION`, registers activation hooks.                 |
-| `includes/class-plugin.php`                   | Composition root. Instantiates components and registers hooks.                                     |
-| `includes/class-schema.php`                   | Install/upgrade table. Verify MariaDB version. Admin notice on incompatibility.                    |
-| `includes/class-repository.php`               | `$wpdb` wrapper. `replace_post_chunks()`, `delete_post()`, `knn()`. Vector text serialization.     |
-| `includes/class-embedding-client.php`         | Thin wrapper over the WP 7.0 AI Connector. Batched `texts[] → vectors[][]`. Detects provider availability. |
-| `includes/class-chunker.php`                  | Block strip + paragraph/sentence/char splitting with overlap. Title prepended to each chunk.       |
-| `includes/class-indexer.php`                  | `save_post`/`delete_post`/`trashed_post` hooks. Cron worker that calls embedding client and repository. |
-| `includes/class-search.php`                   | `pre_get_posts` rewrite to `post__in` + `orderby=post__in`. Safe fallback to default search.       |
-| `includes/class-cli.php`                      | `wp mariadb-vector reindex [--post-type=] [--force] [--batch=]`. Loaded only if `WP_CLI`.          |
-| `includes/class-cron-backfill.php`            | Batched cron-driven reindex of all posts. Progress in transient.                                   |
-| `includes/class-admin.php`                    | Tools page: status (MariaDB version, indexed count, last update, AI Connector availability), "Reindex all" button. |
-| `uninstall.php`                               | `DROP TABLE`, delete all `wp_mariadb_vector_search_*` options.                                     |
+| File                              | Responsibility                                                                                     |
+| --------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `wp-mariadb-vector-search.php`    | Bootstrap. Defines `WP_MARIADB_VECTOR_SEARCH_VERSION`, registers activation hooks.                 |
+| `includes/Plugin.php`             | Composition root. Instantiates components and registers hooks.                                     |
+| `includes/Schema.php`             | Install/upgrade table. Verify MariaDB version. Admin notice on incompatibility.                    |
+| `includes/Repository.php`         | `$wpdb` wrapper. `replace_post_chunks()`, `delete_post()`, `search_similar()`. Vector text serialization. |
+| `includes/Embedding_Client.php`   | Thin wrapper over the WP 7.0 AI Connector. Delegates to `Embedding_Prompt_Builder`. Batched `texts[] → vectors[][]`. |
+| `includes/Embedding_Prompt_Builder.php` | Resolves provider/model from settings, builds HTTP requests, applies timeout filter.         |
+| `includes/Model_Catalog.php`      | Enumerates available embedding models (auto-detect from registered providers + known list). Filterable. |
+| `includes/Content_Hash.php`       | SHA-256 hash of post title + content.                                                              |
+| `includes/Chunker.php`            | Block strip + paragraph/sentence/char splitting with overlap. Title prepended to each chunk.       |
+| `includes/Indexer.php`            | `save_post`/`delete_post`/`trashed_post` hooks. Cron worker that calls embedding client and repository. |
+| `includes/Search.php`             | `pre_get_posts` rewrite to `post__in` + `orderby=post__in`. Safe fallback to default search.       |
+| `includes/CLI.php`                | `wp mariadb-vector reindex [--post-type=] [--force] [--batch=]`. Loaded only if `WP_CLI`.          |
+| `includes/Cron_Backfill.php`      | Batched cron-driven reindex of all posts. Progress in transient.                                   |
+| `includes/Admin.php`              | Tools page: status, model selector, unified Reindex button (auto-detects dimension diff).          |
+| `uninstall.php`                   | `DROP TABLE`, delete all `wp_mariadb_vector_search_*` options.                                     |
 
-## KNN query
+## Similarity search query
 
 Two-step query to keep `VECTOR INDEX` usable (a `GROUP BY` directly on the
 distance expression defeats the index):
 
 ```sql
--- Inner: index-driven top-(k * overscan) chunks
+-- Inner: index-driven top-(max_results * overscan) chunks
 SELECT post_id,
        VEC_DISTANCE_COSINE(embedding, VEC_FromText(%s)) AS d
 FROM   {table}
@@ -125,18 +126,21 @@ WHERE  post_type IN (...)
 ORDER  BY d ASC
 LIMIT  %d;
 
--- Outer (PHP-side): group by post_id, keep min d, take top k
+-- Outer (PHP-side): group by post_id, keep MIN(d),
+--   filter d <= max_distance, slice to max_results
 ```
 
-If overscan is insufficient (many chunks from few posts dominate), bump
-`chunk_overscan`. The default of 5 covers typical content.
+The default `overscan` of 5 covers typical content. `max_distance` (default
+0.65) excludes posts that are too dissimilar; `max_results` (default 200) caps
+the result set and ensures the VECTOR INDEX is engaged.
 
 ## Chunking
 
 - Strip blocks (`excerpt_remove_blocks()`) and HTML (`wp_strip_all_tags()`).
 - Split on paragraph → sentence → character boundaries.
 - Default `chunk_size_chars` = 2000, `chunk_overlap_chars` = 300 (good for
-  Japanese + English mixed text; ~1000 tokens per chunk).
+  Japanese + English mixed text; ~1000 tokens per chunk). These are code-level
+  defaults in `Chunker.php`, not stored in the settings option.
 - Prepend `"{title}\n\n"` to every chunk so isolated chunks retain topical
   context.
 - Token-count approximation: `mb_strlen($text) / 2` (close enough for size
@@ -144,15 +148,11 @@ If overscan is insufficient (many chunks from few posts dominate), bump
 
 ## Settings (`wp_mariadb_vector_search_settings`, single option, array)
 
-| Key                   | Default | Purpose                                                |
-| --------------------- | ------- | ------------------------------------------------------ |
-| `model`               | (informational) | Display label, e.g. `text-embedding-3-small`   |
-| `dimensions`          | 1536    | Fixed at install. Schema's `VECTOR(N)`.                |
-| `top_k`               | 20      | Number of posts to return.                             |
-| `chunk_overscan`      | 5       | Inner LIMIT multiplier (`top_k * overscan`).           |
-| `chunk_size_chars`    | 2000    | Target chunk size.                                     |
-| `chunk_overlap_chars` | 300     | Overlap between adjacent chunks.                       |
-| `min_score`           | 0.6     | Max cosine distance to include in results.             |
+| Key          | Default | Purpose                                                     |
+| ------------ | ------- | ----------------------------------------------------------- |
+| `provider`   | —       | AI provider id (e.g. `openai`, `lmstudio`).                 |
+| `model`      | —       | Embedding model id (e.g. `text-embedding-3-small`).         |
+| `dimensions` | 1536    | Fixed at install. Schema's `VECTOR(N)`. Changing to a different dimension requires Reindex. |
 
 Other options:
 
@@ -161,21 +161,19 @@ Other options:
 ## Extension points (filters/actions)
 
 - `wp_mariadb_vector_search_post_types` (`string[]`) — override indexed post types.
-- `wp_mariadb_vector_search_indexable_text` (`string $text, WP_Post $post`) — adjust source text before chunking.
-- `wp_mariadb_vector_search_chunks` (`string[] $chunks, WP_Post $post`) — replace chunk array entirely.
-- `wp_mariadb_vector_search_chunk_size` (`int`, `int`) — tweak size / overlap.
-- `wp_mariadb_vector_search_embed` (`float[][]|WP_Error, string[] $texts`) — provide an alternative embedding backend.
-- `wp_mariadb_vector_search_query_args` (`array $args, WP_Query $q`) — adjust args before `pre_get_posts` rewrite.
+- `wp_mariadb_vector_search_max_distance` (`float`, default `0.65`) — maximum cosine distance to include in results. `0` = identical, smaller = more similar. Optimal value is model-dependent.
+- `wp_mariadb_vector_search_max_results` (`int`, default `200`) — safety cap on returned posts; also the basis for the inner `LIMIT` so the VECTOR INDEX is used.
+- `wp_mariadb_vector_search_embedding_timeout` (`float`, default `60.0`) — HTTP timeout in seconds for embedding API requests. Increase for local models (e.g. LM Studio).
+- `wp_mariadb_vector_search_known_embedding_models` (`array`) — extend or replace the built-in list of known embedding models shown in the model selector.
 
 ## `$wpdb` notes
 
 - `VECTOR` is a binary type and is unaffected by `utf8mb4`.
 - Pass vectors as JSON-style text wrapped by `VEC_FromText(%s)`. **Do not** use
   `%f` for floats: locale-dependent and lossy. Format with
-  `sprintf('%.7g', $f)` and a locale-stable join.
+  `number_format($f, 10, '.', '')` and a locale-stable join.
 - `$wpdb` returns `VECTOR` columns as raw bytes. When reading vectors back in
   PHP, prefer `SELECT VEC_ToText(embedding)`.
-- Cache KNN results by `hash(query_vec + model + filters)`; never by `s` alone.
 
 ## Development workflow — Test-Driven Development
 
@@ -186,36 +184,33 @@ demands it.
 Rules:
 
 1. **Red**: add or extend a test in `tests/phpunit/...` that fails for the
-   right reason (run `composer test` to see the failure).
+   right reason.
 2. **Green**: write the minimum code in `includes/...` to make it pass — no
    more. Resist designing for hypothetical needs.
 3. **Refactor**: clean up under the safety of green tests. Run `composer lint`.
 4. Commit after each green-and-clean cycle.
 
+Test commands:
+
+```bash
+npm run test:php:base  # fast (recommended; requires wp-env running)
+npm run test:php       # full suite
+composer lint          # PHPCS
+```
+
 Layering:
 
 - **Unit tests** (`tests/phpunit/unit/`): pure-PHP logic, no WordPress.
-  Examples: vector serialization, chunker, text normalization, hashing.
+  Examples: vector serialization, chunker, text normalization, hashing, model catalog.
   These must run without `wp-env`.
 - **Integration tests** (`tests/phpunit/integration/`): exercise `$wpdb`,
   hooks, and the AI Connector wrapper. Run inside `wp-env` against MariaDB
-  11.7+. The AI Connector is **stubbed** by registering a fake provider via
-  `wp_mariadb_vector_search_embed` filter so tests are deterministic and
-  offline — never call a real LLM in CI.
-- **Manual verification** stays as the smoke test list at the bottom of this
-  document; not a substitute for automated tests.
+  11.7+. The AI Connector is **stubbed** via dependency injection — an anonymous
+  class implementing the `Embedding_Client` interface is passed directly to
+  `Indexer`/`Search`, returning deterministic vectors without any network calls.
+  Never call a real LLM in CI.
 
-Suggested test files (built incrementally, one per implementation step):
-
-- `tests/phpunit/unit/test-vector-serialization.php` — locale independence, NaN/Inf rejection, fixed-dimension enforcement.
-- `tests/phpunit/unit/test-chunker.php` — paragraph/sentence/char split, overlap, title prepend, empty/short/very-long boundaries, multibyte safety.
-- `tests/phpunit/unit/test-content-hash.php` — hash stability across whitespace/block-comment changes.
-- `tests/phpunit/integration/test-schema.php` — install creates the table with `VECTOR(N)` and the cosine `VECTOR INDEX`; reinstall is idempotent; uninstall drops it.
-- `tests/phpunit/integration/test-repository-knn.php` — `replace_post_chunks` + `knn` against real MariaDB. Verifies post-level `MIN(distance)` aggregation and `post_type` filtering.
-- `tests/phpunit/integration/test-embedding-client.php` — stubbed AI Connector returns expected vectors; provider-missing case yields `WP_Error`; the `wp_mariadb_vector_search_embed` escape hatch wins.
-- `tests/phpunit/integration/test-indexer.php` — `save_post` schedules a job; running the cron job calls the embedding client and writes chunks; unchanged content (`content_hash` match) is skipped; `delete_post` clears rows.
-- `tests/phpunit/integration/test-search.php` — `pre_get_posts` rewrite produces expected `post__in` ordering for a known stub; falls back to default search on embedding error; respects `post_type` filter.
-- `tests/phpunit/integration/test-cli.php` — `wp mariadb-vector reindex` processes a fixture set and exits 0; `--force` re-embeds even when hash matches.
+Test file naming convention: `*_Test.php`.
 
 ## Manual verification
 
@@ -231,5 +226,5 @@ Suggested test files (built incrementally, one per implementation step):
    (e.g. "猫" matching posts that only say "ねこ" / "feline");
    compare ordering vs. default search.
 7. Disable the provider → search → confirm fallback to default behavior + WP_Error in log.
-8. `composer test` and `composer lint`.
+8. `npm run test:php:base` and `composer lint`.
 9. Delete the plugin → `SHOW TABLES LIKE 'wp_mariadb_vector_embeddings'` returns empty.
