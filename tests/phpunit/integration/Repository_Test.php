@@ -199,7 +199,7 @@ class Repository_Test extends \WP_UnitTestCase {
 	// -----------------------------------------------------------------------
 
 	/** Posts are ordered by ascending cosine distance. */
-	public function test_knn_returns_posts_ordered_by_distance(): void {
+	public function test_search_similar_returns_posts_ordered_by_distance(): void {
 		// Post 1: close to query [1,0,0,0].
 		$this->repository->replace_post_chunks(
 			1,
@@ -227,13 +227,14 @@ class Repository_Test extends \WP_UnitTestCase {
 			)
 		);
 
-		$ids = $this->repository->knn( array( 1.0, 0.0, 0.0, 0.0 ), 5, array( 'post' ) );
+		// Default INF threshold returns both posts.
+		$ids = $this->repository->search_similar( array( 1.0, 0.0, 0.0, 0.0 ), array( 'post' ) );
 
 		$this->assertSame( array( 1, 2 ), $ids );
 	}
 
-	/** At most k results are returned. */
-	public function test_knn_respects_top_k(): void {
+	/** At most max_results posts are returned. */
+	public function test_search_similar_respects_max_results(): void {
 		for ( $i = 1; $i <= 5; $i++ ) {
 			$vec    = array_fill( 0, self::DIMS, 0.0 );
 			$vec[0] = (float) $i / 5;
@@ -251,12 +252,12 @@ class Repository_Test extends \WP_UnitTestCase {
 			);
 		}
 
-		$ids = $this->repository->knn( array( 1.0, 0.0, 0.0, 0.0 ), 2, array( 'post' ) );
+		$ids = $this->repository->search_similar( array( 1.0, 0.0, 0.0, 0.0 ), array( 'post' ), INF, 2 );
 		$this->assertCount( 2, $ids );
 	}
 
 	/** Only posts of the requested post type are returned. */
-	public function test_knn_filters_by_post_type(): void {
+	public function test_search_similar_filters_by_post_type(): void {
 		$this->repository->replace_post_chunks(
 			10,
 			'post',
@@ -282,13 +283,13 @@ class Repository_Test extends \WP_UnitTestCase {
 			)
 		);
 
-		$ids = $this->repository->knn( array( 1.0, 0.0, 0.0, 0.0 ), 10, array( 'post' ) );
+		$ids = $this->repository->search_similar( array( 1.0, 0.0, 0.0, 0.0 ), array( 'post' ) );
 		$this->assertContains( 10, $ids );
 		$this->assertNotContains( 11, $ids );
 	}
 
 	/** The closest chunk wins when a post has multiple chunks. */
-	public function test_knn_aggregates_multiple_chunks_per_post(): void {
+	public function test_search_similar_aggregates_multiple_chunks_per_post(): void {
 		// Post 1 has two chunks: one far, one close to query.
 		$this->repository->replace_post_chunks(
 			1,
@@ -322,7 +323,42 @@ class Repository_Test extends \WP_UnitTestCase {
 		);
 
 		// Query is [1,0,0,0]: post 1 chunk 1 is the exact match, so post 1 should rank first.
-		$ids = $this->repository->knn( array( 1.0, 0.0, 0.0, 0.0 ), 5, array( 'post' ) );
+		$ids = $this->repository->search_similar( array( 1.0, 0.0, 0.0, 0.0 ), array( 'post' ) );
 		$this->assertSame( 1, $ids[0] );
+	}
+
+	/** Posts beyond the max distance threshold are excluded. */
+	public function test_search_similar_filters_by_max_distance(): void {
+		// Post 1: identical to query vector (distance ≈ 0).
+		$this->repository->replace_post_chunks(
+			1,
+			'post',
+			'h1',
+			array(
+				array(
+					'chunk_index' => 0,
+					'chunk_text'  => 'A',
+					'vector'      => array( 1.0, 0.0, 0.0, 0.0 ),
+				),
+			)
+		);
+		// Post 2: orthogonal to query (cosine distance = 1.0).
+		$this->repository->replace_post_chunks(
+			2,
+			'post',
+			'h2',
+			array(
+				array(
+					'chunk_index' => 0,
+					'chunk_text'  => 'B',
+					'vector'      => array( 0.0, 1.0, 0.0, 0.0 ),
+				),
+			)
+		);
+
+		// Threshold 0.5 should exclude post 2 (distance 1.0).
+		$ids = $this->repository->search_similar( array( 1.0, 0.0, 0.0, 0.0 ), array( 'post' ), 0.5 );
+
+		$this->assertSame( array( 1 ), $ids );
 	}
 }

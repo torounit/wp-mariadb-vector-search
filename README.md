@@ -89,6 +89,35 @@ add_filter(
 );
 ```
 
+### `wp_mariadb_vector_search_max_distance`
+
+Maximum cosine distance a post may have from the query to appear in results.
+`0` = identical, smaller = more similar, `~1` = unrelated. Default `0.65`.
+The optimal value depends on the embedding model — adjust as needed.
+
+```php
+add_filter(
+    'wp_mariadb_vector_search_max_distance',
+    function (): float {
+        return 0.5; // stricter: only closely related posts
+    }
+);
+```
+
+### `wp_mariadb_vector_search_max_results`
+
+Safety cap on the number of posts returned by a single search. Also controls the inner
+`LIMIT` passed to the database query so the VECTOR INDEX is used. Default `200`.
+
+```php
+add_filter(
+    'wp_mariadb_vector_search_max_results',
+    function (): int {
+        return 50;
+    }
+);
+```
+
 ## Uninstall
 
 Deleting the plugin runs `uninstall.php`, which drops the embeddings table and removes all related options.

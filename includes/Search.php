@@ -10,14 +10,16 @@ declare(strict_types=1);
 namespace WP_MariaDB_Vector_Search;
 
 /**
- * Hooks into pre_get_posts to rewrite the main search query with vector KNN.
+ * Hooks into pre_get_posts to rewrite the main search query with vector similarity.
  *
  * Only fires when:
  * - is_main_query() is true, AND
  * - is_search() is true, AND
  * - the 's' parameter is non-empty.
  *
- * On embedding or KNN failure the query falls through to default WP search.
+ * On embedding or similarity search failure the query falls through to default WP search.
+ * Results are filtered by cosine distance threshold (wp_mariadb_vector_search_max_distance,
+ * default 0.65) — posts that are too dissimilar to the query are excluded.
  */
 class Search {
 
@@ -26,12 +28,10 @@ class Search {
 	 *
 	 * @param Embedding_Client $client     Embedding provider wrapper.
 	 * @param Repository       $repository Embeddings table wrapper.
-	 * @param int              $top_k      Number of posts to return.
 	 */
 	public function __construct(
 		private Embedding_Client $client,
 		private Repository $repository,
-		private int $top_k = 20,
 	) {}
 
 	/**
@@ -44,7 +44,7 @@ class Search {
 	}
 
 	/**
-	 * Rewrite a search WP_Query to use vector KNN results.
+	 * Rewrite a search WP_Query to use vector similarity results.
 	 *
 	 * @param \WP_Query $query The query object, modified in place.
 	 * @return void
@@ -66,7 +66,9 @@ class Search {
 			return;
 		}
 
-		$ids = $this->repository->knn( $result[0], $this->top_k, $post_types );
+		$max_distance = (float) apply_filters( 'wp_mariadb_vector_search_max_distance', 0.65 );
+		$max_results  = (int) apply_filters( 'wp_mariadb_vector_search_max_results', 200 );
+		$ids          = $this->repository->search_similar( $result[0], $post_types, $max_distance, $max_results );
 
 		if ( empty( $ids ) ) {
 			return;

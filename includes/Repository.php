@@ -215,23 +215,33 @@ class Repository {
 	}
 
 	/**
-	 * Return the top-K most similar post IDs for a query vector.
+	 * Return post IDs whose embeddings are within a cosine distance threshold.
 	 *
 	 * Uses a two-step approach so the VECTOR INDEX is used by the inner query
-	 * (ORDER BY distance LIMIT overscan), then PHP aggregates per post.
+	 * (ORDER BY distance LIMIT overscan), then PHP aggregates per post and
+	 * applies the distance threshold filter.
 	 *
 	 * @param float[]  $query_vector Embedding of the search query.
-	 * @param int      $k            Number of posts to return.
 	 * @param string[] $post_types   Post types to include.
+	 * @param float    $max_distance Maximum cosine distance to include (0=identical, ~1=unrelated).
+	 *                               Default INF means no threshold filtering.
+	 * @param int      $max_results  Safety cap on the number of posts returned and the basis for
+	 *                               the inner LIMIT (ensures the VECTOR INDEX is used). Default 200.
 	 * @param int      $overscan     Inner LIMIT multiplier (default 5).
 	 * @return int[]  Post IDs ordered by ascending cosine distance.
 	 */
-	public function knn( array $query_vector, int $k, array $post_types, int $overscan = 5 ): array {
+	public function search_similar(
+		array $query_vector,
+		array $post_types,
+		float $max_distance = INF,
+		int $max_results = 200,
+		int $overscan = 5
+	): array {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
 
 		$vec_literal = self::format_vector_literal( $query_vector );
-		$inner_limit = $k * $overscan;
+		$inner_limit = $max_results * $overscan;
 		$type_list   = implode( ',', array_map( static fn( $t ) => "'" . esc_sql( $t ) . "'", $post_types ) );
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -263,7 +273,16 @@ class Repository {
 		}
 
 		asort( $min_by_post );
-		$ids = array_keys( array_slice( $min_by_post, 0, $k, true ) );
+
+		// Apply distance threshold: exclude posts that are too dissimilar.
+		if ( is_finite( $max_distance ) ) {
+			$min_by_post = array_filter(
+				$min_by_post,
+				static fn( float $d ): bool => $d <= $max_distance
+			);
+		}
+
+		$ids = array_keys( array_slice( $min_by_post, 0, $max_results, true ) );
 		return array_map( 'intval', $ids );
 	}
 }
