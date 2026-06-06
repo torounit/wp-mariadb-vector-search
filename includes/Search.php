@@ -74,7 +74,6 @@ class Search {
 
 		$query->set( 'post__in', $ids );
 		$query->set( 'orderby', 'post__in' );
-		$query->set( 's', '' );
 
 		// Suppress the default LIKE-based search clause.
 		add_filter( 'posts_search', '__return_empty_string', 99 );

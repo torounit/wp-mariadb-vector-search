@@ -273,6 +273,24 @@ class Search_Test extends \WP_UnitTestCase {
 		$this->assertIsArray( $query->posts );
 	}
 
+	/** The 's' query var is preserved so templates can display the search term. */
+	public function test_search_preserves_search_query_var(): void {
+		$query = new \WP_Query(
+			array(
+				's'              => 'cats',
+				'post_type'      => 'post',
+				'posts_per_page' => 10,
+				'fields'         => 'ids',
+			)
+		);
+
+		$this->as_main_query( $query );
+		$query->get_posts();
+		$this->restore_main_query();
+
+		$this->assertSame( 'cats', $query->get( 's' ) );
+	}
+
 	/** A non-search query is not modified by the Search class. */
 	public function test_non_search_query_is_not_modified(): void {
 		$query = new \WP_Query(
