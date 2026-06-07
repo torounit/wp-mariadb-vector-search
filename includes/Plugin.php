@@ -53,6 +53,9 @@ class Plugin {
 		$admin      = new Admin();
 		$rest       = new Rest_Api( $backfill, $repository, $catalog, $client );
 
+		// Register Abilities.
+		Abilities::register();
+
 		// Index posts on save / delete.
 		add_action( 'save_post', array( $indexer, 'index_post' ) );
 		add_action( 'delete_post', array( $indexer, 'delete_post' ) );
