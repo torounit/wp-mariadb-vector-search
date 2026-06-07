@@ -143,15 +143,55 @@ class Abilities {
 	/**
 	 * Callback for reindex ability.
 	 *
-	 * @param array|null $input Ability input (unused in current implementation).
-	 * @return array
+	 * @param array|null $input Ability input.
+	 * @return array|\WP_Error
 	 */
-	public static function execute_reindex( ?array $input = null ): array {
-		unset( $input );
+	public static function execute_reindex( ?array $input = null ): array|\WP_Error {
+		$force = is_array( $input ) && isset( $input['force'] )
+			? (bool) $input['force']
+			: false;
 
-		// Dummy result for Green phase.
-		return array(
-			'rebuilt' => true,
-		);
+		$confirm_rebuild = is_array( $input ) && isset( $input['confirm_rebuild'] )
+			? (bool) $input['confirm_rebuild']
+			: false;
+
+		$settings   = get_option( Admin::SETTINGS_KEY, array() );
+		$saved_dims = is_array( $settings ) && isset( $settings['dimensions'] )
+			? (int) $settings['dimensions']
+			: Plugin::DEFAULT_DIMENSIONS;
+
+		$repository  = new Repository();
+		$installed   = Schema::is_installed();
+		$table_dims  = $installed ? $repository->get_column_dimensions() : null;
+		$dim_changed = $installed && null !== $table_dims && $table_dims !== $saved_dims;
+
+		$indexer  = new Indexer( new Embedding_Client(), $repository );
+		$backfill = new Cron_Backfill( $indexer );
+
+		if ( $dim_changed ) {
+			if ( ! $confirm_rebuild ) {
+				return new \WP_Error(
+					'confirm_required',
+					__( 'Please confirm before rebuilding.', 'wp-mariadb-vector-search' ),
+					array( 'status' => 400 )
+				);
+			}
+
+			Schema::drop();
+			delete_option( Schema::DB_VERSION_OPTION );
+			Schema::install( $saved_dims );
+			$backfill->schedule( true );
+
+			return array( 'rebuilt' => true );
+		}
+
+		if ( ! $installed ) {
+			Schema::install( $saved_dims );
+			$backfill->schedule( true );
+		} else {
+			$backfill->schedule( $force );
+		}
+
+		return array( 'rebuilt' => false );
 	}
 }
