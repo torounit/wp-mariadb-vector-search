@@ -2,7 +2,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { Button, Notice, SelectControl, Spinner } from '@wordpress/components';
 import { useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import type { AvailableModel, SaveModelResponse } from './types';
+import type { AvailableModel, SaveModelResponse, SettingsApiResponse } from './types';
 
 interface Props {
 	availableModels: AvailableModel[];
@@ -56,7 +56,7 @@ export function ModelSelector( {
 		setError( null );
 
 		try {
-			const result = await apiFetch< any >( {
+			const result = await apiFetch< SettingsApiResponse >( {
 				path: '/wp/v2/settings/wp_mariadb_vector_search_settings',
 				method: 'POST',
 				data: {
@@ -66,12 +66,12 @@ export function ModelSelector( {
 					},
 				},
 			} );
-			// The Settings API returns the updated option. 
+			// The Settings API returns the updated option.
 			// We need to determine if dimensions changed to trigger a rebuild.
 			const newDims = result.wp_mariadb_vector_search_settings.dimensions;
 			const needRebuild = newDims !== currentDims;
 
-			onSaved( newDims, needRebuild );
+			onSaved( newDims ?? 0, needRebuild );
 		} catch ( err ) {
 			const message =
 				err instanceof Error
