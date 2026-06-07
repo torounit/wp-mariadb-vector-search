@@ -23,7 +23,7 @@ export function VectorSearchApp() {
 		setStatus( { phase: 'loading' } );
 		try {
 			const data = await apiFetch< StatusResponse >( {
-				path: '/wp-mariadb-vector-search/v1/status',
+				path: '/wp-abilities/v1/abilities/wp-mariadb-vector-search/get-status',
 			} );
 			setStatus( { phase: 'ready', data } );
 		} catch ( err ) {

@@ -56,12 +56,22 @@ export function ModelSelector( {
 		setError( null );
 
 		try {
-			const result = await apiFetch< SaveModelResponse >( {
-				path: '/wp-mariadb-vector-search/v1/save-model',
+			const result = await apiFetch< any >( {
+				path: '/wp/v2/settings/wp_mariadb_vector_search_settings',
 				method: 'POST',
-				data: { provider, model },
+				data: {
+					wp_mariadb_vector_search_settings: {
+						provider,
+						model,
+					},
+				},
 			} );
-			onSaved( result.dimensions, result.need_rebuild );
+			// The Settings API returns the updated option. 
+			// We need to determine if dimensions changed to trigger a rebuild.
+			const newDims = result.wp_mariadb_vector_search_settings.dimensions;
+			const needRebuild = newDims !== currentDims;
+
+			onSaved( newDims, needRebuild );
 		} catch ( err ) {
 			const message =
 				err instanceof Error
