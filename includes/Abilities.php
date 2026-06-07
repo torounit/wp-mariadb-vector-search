@@ -104,34 +104,51 @@ class Abilities {
 	/**
 	 * Callback for get-status ability.
 	 *
-	 * @param array|null $input
+	 * @param array|null $input Ability input (unused).
 	 * @return array
 	 */
 	public static function execute_get_status( ?array $input = null ): array {
-		// Dummy data for Green phase.
+		unset( $input );
+
+		$repository   = new Repository();
+		$catalog      = Model_Catalog::create();
+		$is_supported = Schema::is_vector_supported();
+		$installed    = Schema::is_installed();
+		$schema_ready = $is_supported && $installed;
+
+		$settings     = get_option( Admin::SETTINGS_KEY, array() );
+		$cur_provider = is_array( $settings ) ? (string) ( $settings['provider'] ?? '' ) : '';
+		$cur_model    = is_array( $settings ) ? (string) ( $settings['model'] ?? '' ) : '';
+		$cur_dims     = is_array( $settings ) && isset( $settings['dimensions'] ) ? (int) $settings['dimensions'] : null;
+
+		$table_dims  = $schema_ready ? $repository->get_column_dimensions() : null;
+		$dim_changed = $installed && null !== $table_dims && null !== $cur_dims && $table_dims !== $cur_dims;
+
 		return array(
-			'is_supported'     => true,
-			'installed'        => true,
-			'indexed'          => 0,
-			'table_dims'       => 1536,
-			'progress'         => null,
+			'is_supported'     => $is_supported,
+			'installed'        => $installed,
+			'indexed'          => $schema_ready ? $repository->count_indexed() : 0,
+			'table_dims'       => $table_dims,
+			'progress'         => get_transient( Cron_Backfill::PROGRESS_KEY ),
 			'settings'         => array(
-				'provider'   => 'openai',
-				'model'      => 'text-embedding-3-small',
-				'dimensions' => 1536,
+				'provider'   => $cur_provider,
+				'model'      => $cur_model,
+				'dimensions' => $cur_dims,
 			),
-			'available_models' => array(),
-			'dim_changed'      => false,
+			'available_models' => $catalog->get_available_models(),
+			'dim_changed'      => $dim_changed,
 		);
 	}
 
 	/**
 	 * Callback for reindex ability.
 	 *
-	 * @param array|null $input
+	 * @param array|null $input Ability input (unused in current implementation).
 	 * @return array
 	 */
 	public static function execute_reindex( ?array $input = null ): array {
+		unset( $input );
+
 		// Dummy result for Green phase.
 		return array(
 			'rebuilt' => true,
