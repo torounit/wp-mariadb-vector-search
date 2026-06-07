@@ -46,6 +46,12 @@ class Indexer {
 			return;
 		}
 
+		$indexable_post_types = $this->get_indexable_post_types();
+		if ( ! in_array( $post->post_type, $indexable_post_types, true ) ) {
+			wp_mariadb_vector_search_log( "index_post({$post_id}): post_type={$post->post_type}, skipping (not indexable)." );
+			return;
+		}
+
 		if ( 'publish' !== $post->post_status ) {
 			wp_mariadb_vector_search_log( "index_post({$post_id}): status={$post->post_status}, skipping (not published)." );
 			return;
@@ -107,5 +113,26 @@ class Indexer {
 	 */
 	public function delete_post( int $post_id ): void {
 		$this->repository->delete_post( $post_id );
+	}
+
+	/**
+	 * Determine post types that are eligible for indexing.
+	 *
+	 * Defaults to public searchable post types and is filterable via
+	 * wp_mariadb_vector_search_post_types.
+	 *
+	 * @return string[]
+	 */
+	private function get_indexable_post_types(): array {
+		$post_types = array_keys(
+			get_post_types(
+				array(
+					'public'              => true,
+					'exclude_from_search' => false,
+				)
+			)
+		);
+
+		return (array) apply_filters( 'wp_mariadb_vector_search_post_types', $post_types );
 	}
 }
