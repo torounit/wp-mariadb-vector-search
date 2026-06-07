@@ -56,6 +56,9 @@ class Plugin {
 		// Register Abilities.
 		Abilities::register();
 
+		// Register Settings.
+		Settings::register();
+
 		// Index posts on save / delete.
 		add_action( 'save_post', array( $indexer, 'index_post' ) );
 		add_action( 'delete_post', array( $indexer, 'delete_post' ) );
