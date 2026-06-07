@@ -72,6 +72,21 @@ class Abilities {
 				'description'        => __( 'Triggers a full reindex of all posts.', 'wp-mariadb-vector-search' ),
 				'category'           => self::CATEGORY_SLUG,
 				'meta'               => array( 'show_in_rest' => true ),
+				'input_schema'       => array(
+					'type'       => 'object',
+					'properties' => array(
+						'force'           => array(
+							'type'        => 'boolean',
+							'description' => __( 'Force a full rebuild.', 'wp-mariadb-vector-search' ),
+							'default'     => false,
+						),
+						'confirm_rebuild' => array(
+							'type'        => 'boolean',
+							'description' => __( 'Confirm the rebuild process.', 'wp-mariadb-vector-search' ),
+							'default'     => false,
+						),
+					),
+				),
 				'execute_callback'   => array( __CLASS__, 'execute_reindex' ),
 				'permission_callback' => function() {
 					return current_user_can( 'manage_options' );
@@ -86,7 +101,7 @@ class Abilities {
 	 * @param array|null $input
 	 * @return array
 	 */
-	public static function execute_get_status( ?array $input ): array {
+	public static function execute_get_status( ?array $input = null ): array {
 		// Dummy data for Green phase.
 		return array(
 			'is_supported'      => true,
@@ -110,7 +125,7 @@ class Abilities {
 	 * @param array|null $input
 	 * @return array
 	 */
-	public static function execute_reindex( ?array $input ): array {
+	public static function execute_reindex( ?array $input = null ): array {
 		// Dummy result for Green phase.
 		return array(
 			'rebuilt' => true,
