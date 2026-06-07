@@ -13,6 +13,37 @@ type AppStatus =
 	| { phase: 'error'; message: string }
 	| { phase: 'ready'; data: StatusResponse };
 
+type StatusRunResponse =
+	| StatusResponse
+	| {
+			result?: StatusResponse;
+			output?: StatusResponse;
+			data?: StatusResponse;
+	  };
+
+function normalizeStatusResponse( raw: StatusRunResponse ): StatusResponse {
+	const resolved =
+		( raw as { result?: StatusResponse } )?.result ??
+		( raw as { output?: StatusResponse } )?.output ??
+		( raw as { data?: StatusResponse } )?.data ??
+		( raw as StatusResponse );
+
+	return {
+		is_supported: resolved?.is_supported ?? false,
+		installed: resolved?.installed ?? false,
+		indexed: resolved?.indexed ?? 0,
+		table_dims: resolved?.table_dims ?? null,
+		progress: resolved?.progress ?? null,
+		settings: {
+			provider: resolved?.settings?.provider ?? '',
+			model: resolved?.settings?.model ?? '',
+			dimensions: resolved?.settings?.dimensions ?? null,
+		},
+		available_models: resolved?.available_models ?? [],
+		dim_changed: resolved?.dim_changed ?? false,
+	};
+}
+
 export function VectorSearchApp() {
 	const [ status, setStatus ] = useState< AppStatus >( { phase: 'loading' } );
 	const [ successMessage, setSuccessMessage ] = useState< string | null >(
@@ -22,10 +53,10 @@ export function VectorSearchApp() {
 	async function loadStatus() {
 		setStatus( { phase: 'loading' } );
 		try {
-			const data = await apiFetch< StatusResponse >( {
-				path: '/wp-abilities/v1/abilities/wp-mariadb-vector-search/get-status',
+			const data = await apiFetch< StatusRunResponse >( {
+				path: '/wp-abilities/v1/abilities/wp-mariadb-vector-search/get-status/run',
 			} );
-			setStatus( { phase: 'ready', data } );
+			setStatus( { phase: 'ready', data: normalizeStatusResponse( data ) } );
 		} catch ( err ) {
 			const message =
 				err instanceof Error

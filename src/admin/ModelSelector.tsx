@@ -2,7 +2,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { Button, Notice, SelectControl, Spinner } from '@wordpress/components';
 import { useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import type { AvailableModel, SaveModelResponse, SettingsApiResponse } from './types';
+import type { AvailableModel, SettingsApiResponse } from './types';
 
 interface Props {
 	availableModels: AvailableModel[];
@@ -57,7 +57,7 @@ export function ModelSelector( {
 
 		try {
 			const result = await apiFetch< SettingsApiResponse >( {
-				path: '/wp/v2/settings/wp_mariadb_vector_search_settings',
+				path: '/wp/v2/settings',
 				method: 'POST',
 				data: {
 					wp_mariadb_vector_search_settings: {
