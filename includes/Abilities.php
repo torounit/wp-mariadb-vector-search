@@ -14,9 +14,9 @@ namespace WP_MariaDB_Vector_Search;
  */
 class Abilities {
 
-	const CATEGORY_SLUG = 'wp-mariadb-vector-search';
+	const CATEGORY_SLUG      = 'wp-mariadb-vector-search';
 	const ABILITY_GET_STATUS = 'wp-mariadb-vector-search/get-status';
-	const ABILITY_REINDEX = 'wp-mariadb-vector-search/reindex';
+	const ABILITY_REINDEX    = 'wp-mariadb-vector-search/reindex';
 
 	/**
 	 * Register abilities and categories.
@@ -53,12 +53,18 @@ class Abilities {
 		wp_register_ability(
 			self::ABILITY_GET_STATUS,
 			array(
-				'label'              => __( 'Get Status', 'wp-mariadb-vector-search' ),
-				'description'        => __( 'Retrieves the current plugin status.', 'wp-mariadb-vector-search' ),
-				'category'           => self::CATEGORY_SLUG,
-				'meta'               => array( 'show_in_rest' => true ),
-				'execute_callback'   => array( __CLASS__, 'execute_get_status' ),
-				'permission_callback' => function() {
+				'label'               => __( 'Get Status', 'wp-mariadb-vector-search' ),
+				'description'         => __( 'Retrieves the current plugin status.', 'wp-mariadb-vector-search' ),
+				'category'            => self::CATEGORY_SLUG,
+				'meta'                => array(
+					'show_in_rest' => true,
+					'annotations'  => array(
+						'readonly'    => true,
+						'destructive' => false,
+					),
+				),
+				'execute_callback'    => array( __CLASS__, 'execute_get_status' ),
+				'permission_callback' => function () {
 					return current_user_can( 'manage_options' );
 				},
 			)
@@ -68,11 +74,11 @@ class Abilities {
 		wp_register_ability(
 			self::ABILITY_REINDEX,
 			array(
-				'label'              => __( 'Reindex', 'wp-mariadb-vector-search' ),
-				'description'        => __( 'Triggers a full reindex of all posts.', 'wp-mariadb-vector-search' ),
-				'category'           => self::CATEGORY_SLUG,
-				'meta'               => array( 'show_in_rest' => true ),
-				'input_schema'       => array(
+				'label'               => __( 'Reindex', 'wp-mariadb-vector-search' ),
+				'description'         => __( 'Triggers a full reindex of all posts.', 'wp-mariadb-vector-search' ),
+				'category'            => self::CATEGORY_SLUG,
+				'meta'                => array( 'show_in_rest' => true ),
+				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
 						'force'           => array(
@@ -87,8 +93,8 @@ class Abilities {
 						),
 					),
 				),
-				'execute_callback'   => array( __CLASS__, 'execute_reindex' ),
-				'permission_callback' => function() {
+				'execute_callback'    => array( __CLASS__, 'execute_reindex' ),
+				'permission_callback' => function () {
 					return current_user_can( 'manage_options' );
 				},
 			)
@@ -104,18 +110,18 @@ class Abilities {
 	public static function execute_get_status( ?array $input = null ): array {
 		// Dummy data for Green phase.
 		return array(
-			'is_supported'      => true,
-			'installed'         => true,
-			'indexed'           => 0,
-			'table_dims'        => 1536,
-			'progress'          => null,
-			'settings'          => array(
-				'provider'  => 'openai',
-				'model'     => 'text-embedding-3-small',
+			'is_supported'     => true,
+			'installed'        => true,
+			'indexed'          => 0,
+			'table_dims'       => 1536,
+			'progress'         => null,
+			'settings'         => array(
+				'provider'   => 'openai',
+				'model'      => 'text-embedding-3-small',
 				'dimensions' => 1536,
 			),
-			'available_models'  => array(),
-			'dim_changed'       => false,
+			'available_models' => array(),
+			'dim_changed'      => false,
 		);
 	}
 
