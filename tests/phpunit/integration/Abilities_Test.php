@@ -24,11 +24,11 @@ class Abilities_Test extends WP_UnitTestCase {
 		$this->assertTrue( function_exists( 'wp_has_ability' ) );
 		$this->assertTrue( wp_has_ability( 'wp-mariadb-vector-search/get-status' ) );
 
+		// Set up a user with manage_options capability.
+		$user_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+
 		// Simulate a REST API request to the ability endpoint.
-		// Note: In a real integration test, we would use the REST API client.
-		// For now, we are testing the ability execution directly via the API registry if possible,
-		// or by simulating the REST request.
-		
 		$ability = wp_get_ability( 'wp-mariadb-vector-search/get-status' );
 		$this->assertNotNull( $ability );
 
@@ -53,6 +53,10 @@ class Abilities_Test extends WP_UnitTestCase {
 	public function test_reindex_ability(): void {
 		// Check if the ability is registered.
 		$this->assertTrue( wp_has_ability( 'wp-mariadb-vector-search/reindex' ) );
+
+		// Set up a user with manage_options capability.
+		$user_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
 
 		$ability = wp_get_ability( 'wp-mariadb-vector-search/reindex' );
 		$this->assertNotNull( $ability );
