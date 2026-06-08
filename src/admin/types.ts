@@ -13,6 +13,7 @@ export interface AvailableModel {
 	provider: string;
 	model: string;
 	label: string;
+	dimensions: number | null;
 }
 
 export interface StatusResponse {

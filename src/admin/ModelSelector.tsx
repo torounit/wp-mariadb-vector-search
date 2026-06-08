@@ -52,26 +52,32 @@ export function ModelSelector( {
 		const provider = selected.slice( 0, colon );
 		const model = selected.slice( colon + 1 );
 
+		// Include dimensions from the catalog so Settings API persists the
+		// correct dimension for the newly selected model.
+		const selectedModel = availableModels.find(
+			( m ) => m.provider === provider && m.model === model
+		);
+		const selectedDims = selectedModel?.dimensions ?? null;
+
 		setIsSaving( true );
 		setError( null );
 
 		try {
+			const payload: Record< string, unknown > = { provider, model };
+			if ( selectedDims !== null ) {
+				payload.dimensions = selectedDims;
+			}
 			const result = await apiFetch< SettingsApiResponse >( {
 				path: '/wp/v2/settings',
 				method: 'POST',
-				data: {
-					wp_mariadb_vector_search_settings: {
-						provider,
-						model,
-					},
-				},
+				data: { wp_mariadb_vector_search_settings: payload },
 			} );
 			// The Settings API returns the updated option.
 			// We need to determine if dimensions changed to trigger a rebuild.
-			const newDims = result.wp_mariadb_vector_search_settings.dimensions;
-			const needRebuild = newDims !== currentDims;
+			const newDims = result.wp_mariadb_vector_search_settings.dimensions ?? null;
+			const needRebuild = newDims !== null && newDims !== currentDims;
 
-			onSaved( newDims ?? 0, needRebuild );
+			onSaved( newDims ?? currentDims ?? 0, needRebuild );
 		} catch ( err ) {
 			const message =
 				err instanceof Error

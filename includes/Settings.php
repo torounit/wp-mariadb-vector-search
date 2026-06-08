@@ -70,10 +70,14 @@ class Settings {
 
 		if ( isset( $input['provider'] ) && is_string( $input['provider'] ) ) {
 			$sanitized['provider'] = sanitize_text_field( $input['provider'] );
+		} elseif ( isset( $existing['provider'] ) && is_string( $existing['provider'] ) ) {
+			$sanitized['provider'] = $existing['provider'];
 		}
 
 		if ( isset( $input['model'] ) && is_string( $input['model'] ) ) {
 			$sanitized['model'] = sanitize_text_field( $input['model'] );
+		} elseif ( isset( $existing['model'] ) && is_string( $existing['model'] ) ) {
+			$sanitized['model'] = $existing['model'];
 		}
 
 		if ( isset( $input['dimensions'] ) && is_numeric( $input['dimensions'] ) ) {
