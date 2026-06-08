@@ -16,6 +16,24 @@ namespace WP_MariaDB_Vector_Search;
 class Repository {
 
 	/**
+	 * Whether get_column_dimensions() has already queried the database.
+	 *
+	 * Separating the "cached" flag from the value allows caching a null result
+	 * (column not found / table not yet installed) without re-querying on every
+	 * call.
+	 *
+	 * @var bool
+	 */
+	private bool $dims_cached = false;
+
+	/**
+	 * Cached result of get_column_dimensions(), or null if the column was not found.
+	 *
+	 * @var int|null
+	 */
+	private ?int $dims_cache = null;
+
+	/**
 	 * Serialize a float array to the text format expected by VEC_FromText().
 	 *
 	 * Uses number_format with an explicit '.' decimal separator so the output
@@ -58,14 +76,12 @@ class Repository {
 	 * @return int|null
 	 */
 	public function get_column_dimensions(): ?int {
-		static $cache = array();
+		if ( $this->dims_cached ) {
+			return $this->dims_cache;
+		}
 
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
-
-		if ( array_key_exists( $table, $cache ) ) {
-			return $cache[ $table ];
-		}
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$col_type = $wpdb->get_var(
@@ -83,7 +99,8 @@ class Repository {
 			$dims = (int) $m[1];
 		}
 
-		$cache[ $table ] = $dims;
+		$this->dims_cached = true;
+		$this->dims_cache  = $dims;
 		return $dims;
 	}
 
