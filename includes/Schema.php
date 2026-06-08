@@ -39,7 +39,7 @@ class Schema {
 			return;
 		}
 
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 		$result = $wpdb->query(
 			"CREATE TABLE IF NOT EXISTS `{$table}` (
 				`id`           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -56,7 +56,7 @@ class Schema {
 				VECTOR INDEX (`embedding`) DISTANCE=cosine
 			) ENGINE=InnoDB {$charset_collate}"
 		);
-		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 		if ( false !== $result ) {
 			update_option( self::DB_VERSION_OPTION, self::DB_VERSION );
@@ -82,7 +82,7 @@ class Schema {
 	public static function drop(): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 		$wpdb->query( "DROP TABLE IF EXISTS `{$table}`" );
 	}
 
@@ -93,6 +93,7 @@ class Schema {
 	 */
 	public static function is_vector_supported(): bool {
 		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$version = $wpdb->get_var( 'SELECT VERSION()' );
 
 		if ( ! is_string( $version ) ) {

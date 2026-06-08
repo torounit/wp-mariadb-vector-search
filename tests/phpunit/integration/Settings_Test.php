@@ -42,9 +42,9 @@ class Settings_Test extends WP_UnitTestCase {
 		// register_setting() to be called with a validation callback.
 
 		$invalid_settings = array(
-			'provider'   => 'invalid-provider', // Assuming validation checks this
-			'model'      => '',                 // Assuming model cannot be empty
-			'dimensions' => 'not-a-number',     // Assuming dimensions must be int
+			'provider'   => 'invalid-provider', // Assuming validation checks this.
+			'model'      => '',                 // Assuming model cannot be empty.
+			'dimensions' => 'not-a-number',     // Assuming dimensions must be int.
 		);
 
 		// We expect register_setting to handle this via its validation callback.
