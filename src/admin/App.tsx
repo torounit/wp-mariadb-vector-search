@@ -33,7 +33,7 @@ function normalizeStatusResponse( raw: StatusRunResponse ): StatusResponse {
 		installed: resolved?.installed ?? false,
 		indexed: resolved?.indexed ?? 0,
 		table_dims: resolved?.table_dims ?? null,
-		progress: resolved?.progress ?? null,
+		progress: resolved?.progress || null,
 		settings: {
 			provider: resolved?.settings?.provider ?? '',
 			model: resolved?.settings?.model ?? '',

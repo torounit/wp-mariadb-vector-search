@@ -71,7 +71,11 @@ class Repository {
 	/**
 	 * Return the declared dimension of the embedding VECTOR column, or null on error.
 	 *
-	 * Result is cached in a static variable so it is only queried once per request.
+	 * The result is cached in instance properties rather than a static variable.
+	 * A static cache would persist across PHPUnit test cases (same PHP process),
+	 * causing stale dimension values after Schema::drop()/install() cycles.
+	 * In production, Plugin wires a single Repository instance for the full
+	 * request, so the per-instance cache is equally efficient there.
 	 *
 	 * @return int|null
 	 */
