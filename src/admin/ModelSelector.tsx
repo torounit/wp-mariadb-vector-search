@@ -41,29 +41,39 @@ export function ModelSelector( {
 
 	const options = availableModels.map( ( m ) => ( {
 		value: `${ m.provider }:${ m.model }`,
-		label: `[${ m.provider }] ${ m.label }`,
+		label: m.dimensions
+			? `[${ m.provider }] ${ m.label } (${ m.dimensions }-dim)`
+			: `[${ m.provider }] ${ m.label }`,
 	} ) );
 
+	// Resolve the currently selected model's known dimensions for preview.
+	const selectedColon = selected.indexOf( ':' );
+	const selectedProvider =
+		selectedColon >= 0 ? selected.slice( 0, selectedColon ) : '';
+	const selectedModelId =
+		selectedColon >= 0 ? selected.slice( selectedColon + 1 ) : '';
+	const selectedModel = availableModels.find(
+		( m ) => m.provider === selectedProvider && m.model === selectedModelId
+	);
+	const selectedDims = selectedModel?.dimensions ?? null;
+	const isModelChanged = selected !== currentValue;
+	const dimWillChange =
+		selectedDims !== null && isModelChanged && selectedDims !== currentDims;
+	const dimUnknown = selectedDims === null && isModelChanged;
+
 	async function handleSave() {
-		const colon = selected.indexOf( ':' );
-		if ( colon < 0 ) {
+		if ( selectedColon < 0 ) {
 			return;
 		}
-		const provider = selected.slice( 0, colon );
-		const model = selected.slice( colon + 1 );
-
-		// Include dimensions from the catalog so Settings API persists the
-		// correct dimension for the newly selected model.
-		const selectedModel = availableModels.find(
-			( m ) => m.provider === provider && m.model === model
-		);
-		const selectedDims = selectedModel?.dimensions ?? null;
 
 		setIsSaving( true );
 		setError( null );
 
 		try {
-			const payload: Record< string, unknown > = { provider, model };
+			const payload: Record< string, unknown > = {
+				provider: selectedProvider,
+				model: selectedModelId,
+			};
 			if ( selectedDims !== null ) {
 				payload.dimensions = selectedDims;
 			}
@@ -97,6 +107,23 @@ export function ModelSelector( {
 					onRemove={ () => setError( null ) }
 				>
 					{ error }
+				</Notice>
+			) }
+			{ dimWillChange && (
+				<Notice status="warning" isDismissible={ false }>
+					{ __(
+						'This model uses different dimensions than the current table. Saving will require a table rebuild.',
+						'wp-mariadb-vector-search'
+					) }{ ' ' }
+					{ `(${ currentDims } → ${ selectedDims })` }
+				</Notice>
+			) }
+			{ dimUnknown && (
+				<Notice status="warning" isDismissible={ false }>
+					{ __(
+						'Dimensions for this model are unknown. If it uses different dimensions than the current table, a rebuild will be required. Check the model documentation.',
+						'wp-mariadb-vector-search'
+					) }
 				</Notice>
 			) }
 			<SelectControl
