@@ -123,13 +123,14 @@ class Abilities {
 
 		$table_dims  = $schema_ready ? $repository->get_column_dimensions() : null;
 		$dim_changed = $installed && null !== $table_dims && null !== $cur_dims && $table_dims !== $cur_dims;
+		$progress    = get_transient( Cron_Backfill::PROGRESS_KEY );
 
 		return array(
 			'is_supported'     => $is_supported,
 			'installed'        => $installed,
 			'indexed'          => $schema_ready ? $repository->count_indexed() : 0,
 			'table_dims'       => $table_dims,
-			'progress'         => get_transient( Cron_Backfill::PROGRESS_KEY ),
+			'progress'         => $progress ? $progress : null,
 			'settings'         => array(
 				'provider'   => $cur_provider,
 				'model'      => $cur_model,

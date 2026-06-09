@@ -80,7 +80,7 @@ class Settings {
 			$sanitized['model'] = $existing['model'];
 		}
 
-		if ( isset( $input['dimensions'] ) && is_numeric( $input['dimensions'] ) ) {
+		if ( isset( $input['dimensions'] ) && is_numeric( $input['dimensions'] ) && (int) $input['dimensions'] >= 1 ) {
 			$sanitized['dimensions'] = (int) $input['dimensions'];
 		} elseif ( isset( $existing['dimensions'] ) && is_numeric( $existing['dimensions'] ) ) {
 			$sanitized['dimensions'] = (int) $existing['dimensions'];

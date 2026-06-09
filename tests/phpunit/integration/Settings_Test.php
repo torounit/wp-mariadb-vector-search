@@ -20,6 +20,22 @@ class Settings_Test extends WP_UnitTestCase {
 	const SETTINGS_OPTION = 'wp_mariadb_vector_search_settings';
 
 	/**
+	 * Ensure each test starts with no stored settings.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		delete_option( self::SETTINGS_OPTION );
+	}
+
+	/**
+	 * Clean up stored settings after each test.
+	 */
+	public function tear_down(): void {
+		delete_option( self::SETTINGS_OPTION );
+		parent::tear_down();
+	}
+
+	/**
 	 * Test that settings can be saved and retrieved.
 	 */
 	public function test_settings_save_and_get(): void {

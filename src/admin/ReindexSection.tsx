@@ -48,6 +48,8 @@ export function ReindexSection( {
 			const rebuilt =
 				( result as { rebuilt?: boolean } )?.rebuilt ??
 				( result as { result?: ReindexResponse } )?.result?.rebuilt ??
+				( result as { output?: ReindexResponse } )?.output?.rebuilt ??
+				( result as { data?: ReindexResponse } )?.data?.rebuilt ??
 				false;
 			onReindexed( rebuilt );
 		} catch ( err ) {

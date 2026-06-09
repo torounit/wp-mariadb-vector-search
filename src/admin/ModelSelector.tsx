@@ -77,7 +77,7 @@ export function ModelSelector( {
 			const newDims = result.wp_mariadb_vector_search_settings.dimensions ?? null;
 			const needRebuild = newDims !== null && newDims !== currentDims;
 
-			onSaved( newDims ?? currentDims ?? 0, needRebuild );
+			onSaved( newDims ?? selectedDims ?? currentDims ?? 0, needRebuild );
 		} catch ( err ) {
 			const message =
 				err instanceof Error
