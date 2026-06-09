@@ -157,14 +157,13 @@ class Abilities {
 			: false;
 
 		$settings   = get_option( Admin::SETTINGS_KEY, array() );
-		$saved_dims = is_array( $settings ) && isset( $settings['dimensions'] )
-			? (int) $settings['dimensions']
-			: Plugin::DEFAULT_DIMENSIONS;
+		$cur_dims   = is_array( $settings ) && isset( $settings['dimensions'] ) ? (int) $settings['dimensions'] : null;
+		$saved_dims = $cur_dims ?? Plugin::DEFAULT_DIMENSIONS;
 
 		$repository  = new Repository();
 		$installed   = Schema::is_installed();
 		$table_dims  = $installed ? $repository->get_column_dimensions() : null;
-		$dim_changed = $installed && null !== $table_dims && $table_dims !== $saved_dims;
+		$dim_changed = $installed && null !== $table_dims && null !== $cur_dims && $table_dims !== $cur_dims;
 
 		$indexer  = new Indexer( new Embedding_Client(), $repository );
 		$backfill = new Cron_Backfill( $indexer );
