@@ -235,4 +235,32 @@ class Indexer_Test extends \WP_UnitTestCase {
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$this->assertSame( 0, $count );
 	}
+
+	/** Non-indexable post types (e.g. nav_menu_item) are not indexed. */
+	public function test_index_post_skips_non_indexable_post_type(): void {
+		global $wpdb;
+		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
+
+		$post_id = wp_insert_post(
+			array(
+				'post_type'    => 'nav_menu_item',
+				'post_title'   => 'Menu item',
+				'post_content' => 'Menu content.',
+				'post_status'  => 'publish',
+			),
+			true
+		);
+
+		$this->assertIsInt( $post_id );
+		$this->assertGreaterThan( 0, $post_id );
+
+		$this->indexer->index_post( $post_id );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$count = (int) $wpdb->get_var(
+			$wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE post_id = %d", $post_id )
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$this->assertSame( 0, $count );
+	}
 }

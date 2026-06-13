@@ -36,11 +36,22 @@ export function ReindexSection( {
 
 		try {
 			const result = await apiFetch< ReindexResponse >( {
-				path: '/wp-mariadb-vector-search/v1/reindex',
+				path: '/wp-abilities/v1/abilities/wp-mariadb-vector-search/reindex/run',
 				method: 'POST',
-				data: { force, confirm_rebuild: confirmRebuild },
+				data: {
+					input: {
+						force,
+						confirm_rebuild: confirmRebuild,
+					},
+				},
 			} );
-			onReindexed( result.rebuilt );
+			const rebuilt =
+				( result as { rebuilt?: boolean } )?.rebuilt ??
+				( result as { result?: ReindexResponse } )?.result?.rebuilt ??
+				( result as { output?: ReindexResponse } )?.output?.rebuilt ??
+				( result as { data?: ReindexResponse } )?.data?.rebuilt ??
+				false;
+			onReindexed( rebuilt );
 		} catch ( err ) {
 			const message =
 				err instanceof Error

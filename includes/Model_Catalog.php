@@ -45,11 +45,12 @@ class Model_Catalog {
 	 * Return all available embedding models.
 	 *
 	 * Each element is an array with keys:
-	 *  - provider (string): Provider id, e.g. "openai".
-	 *  - model    (string): Model id, e.g. "text-embedding-3-small".
-	 *  - label    (string): Human-readable label for the select option.
+	 *  - provider   (string):   Provider id, e.g. "openai".
+	 *  - model      (string):   Model id, e.g. "text-embedding-3-small".
+	 *  - label      (string):   Human-readable label for the select option.
+	 *  - dimensions (int|null): Known embedding dimensions, or null if unknown.
 	 *
-	 * @return array<int, array{provider: string, model: string, label: string}>
+	 * @return array<int, array{provider: string, model: string, label: string, dimensions: int|null}>
 	 */
 	public function get_available_models(): array {
 		$models = array(); // Keyed by "provider:model" for deduplication.
@@ -75,22 +76,27 @@ class Model_Catalog {
 
 		// 2. Known list, filterable via wp_mariadb_vector_search_known_embedding_models.
 		// Entries are restricted to providers that are registered AND configured.
+		// Each entry may include 'dimensions' (int) so the UI can update settings on model change.
 		$default_known = array(
 			array(
-				'provider' => 'openai',
-				'model'    => 'text-embedding-3-small',
+				'provider'   => 'openai',
+				'model'      => 'text-embedding-3-small',
+				'dimensions' => 1536,
 			),
 			array(
-				'provider' => 'openai',
-				'model'    => 'text-embedding-3-large',
+				'provider'   => 'openai',
+				'model'      => 'text-embedding-3-large',
+				'dimensions' => 3072,
 			),
 			array(
-				'provider' => 'openai',
-				'model'    => 'text-embedding-ada-002',
+				'provider'   => 'openai',
+				'model'      => 'text-embedding-ada-002',
+				'dimensions' => 1536,
 			),
 			array(
-				'provider' => 'google',
-				'model'    => 'text-embedding-004',
+				'provider'   => 'google',
+				'model'      => 'text-embedding-004',
+				'dimensions' => 768,
 			),
 		);
 
@@ -98,12 +104,22 @@ class Model_Catalog {
 		 * Filter the list of known embedding models shown in the admin UI.
 		 *
 		 * Each element must have 'provider' (string) and 'model' (string) keys.
+		 * An optional 'dimensions' (int) key specifies the model's output dimensions.
 		 * Entries for providers that are not registered or not configured are
 		 * silently ignored.
 		 *
-		 * @param array<int, array{provider: string, model: string}> $known_list Default known models.
+		 * @param array<int, array{provider: string, model: string, dimensions?: int}> $known_list Default known models.
 		 */
 		$known_list = apply_filters( 'wp_mariadb_vector_search_known_embedding_models', $default_known );
+
+		// Build a dimensions lookup from the known list so auto-detected models also get dimensions.
+		$known_dims = array();
+		foreach ( (array) $known_list as $item ) {
+			if ( is_array( $item ) && isset( $item['provider'], $item['model'], $item['dimensions'] )
+				&& is_int( $item['dimensions'] ) ) {
+				$known_dims[ $item['provider'] . ':' . $item['model'] ] = $item['dimensions'];
+			}
+		}
 
 		foreach ( (array) $known_list as $item ) {
 			if ( ! is_array( $item ) ) {
@@ -135,6 +151,16 @@ class Model_Catalog {
 			);
 		}
 
-		return array_values( $models );
+		// Apply known dimensions to all entries (including auto-detected models).
+		$result = array();
+		foreach ( $models as $key => $m ) {
+			$result[] = array(
+				'provider'   => $m['provider'],
+				'model'      => $m['model'],
+				'label'      => $m['label'],
+				'dimensions' => $known_dims[ $key ] ?? null,
+			);
+		}
+		return $result;
 	}
 }

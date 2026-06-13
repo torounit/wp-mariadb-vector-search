@@ -49,9 +49,13 @@ class Plugin {
 		$indexer    = new Indexer( $client, $repository );
 		$backfill   = new Cron_Backfill( $indexer );
 		$search     = new Search( $client, $repository );
-		$catalog    = Model_Catalog::create();
 		$admin      = new Admin();
-		$rest       = new Rest_Api( $backfill, $repository, $catalog, $client );
+
+		// Register Abilities.
+		Abilities::register();
+
+		// Register Settings.
+		Settings::register();
 
 		// Index posts on save / delete.
 		add_action( 'save_post', array( $indexer, 'index_post' ) );
@@ -61,7 +65,6 @@ class Plugin {
 		$backfill->register_hooks();
 		$search->register_hooks();
 		$admin->register_hooks();
-		$rest->register_hooks();
 
 		if ( defined( 'WP_CLI' ) && \WP_CLI ) {
 			\WP_CLI::add_command( 'mariadb-vector', new CLI( $indexer ) );

@@ -16,6 +16,24 @@ namespace WP_MariaDB_Vector_Search;
 class Repository {
 
 	/**
+	 * Whether get_column_dimensions() has already queried the database.
+	 *
+	 * Separating the "cached" flag from the value allows caching a null result
+	 * (column not found / table not yet installed) without re-querying on every
+	 * call.
+	 *
+	 * @var bool
+	 */
+	private bool $dims_cached = false;
+
+	/**
+	 * Cached result of get_column_dimensions(), or null if the column was not found.
+	 *
+	 * @var int|null
+	 */
+	private ?int $dims_cache = null;
+
+	/**
 	 * Serialize a float array to the text format expected by VEC_FromText().
 	 *
 	 * Uses number_format with an explicit '.' decimal separator so the output
@@ -53,19 +71,21 @@ class Repository {
 	/**
 	 * Return the declared dimension of the embedding VECTOR column, or null on error.
 	 *
-	 * Result is cached in a static variable so it is only queried once per request.
+	 * The result is cached in instance properties rather than a static variable.
+	 * A static cache would persist across PHPUnit test cases (same PHP process),
+	 * causing stale dimension values after Schema::drop()/install() cycles.
+	 * In production, Plugin wires a single Repository instance for the full
+	 * request, so the per-instance cache is equally efficient there.
 	 *
 	 * @return int|null
 	 */
 	public function get_column_dimensions(): ?int {
-		static $cache = array();
+		if ( $this->dims_cached ) {
+			return $this->dims_cache;
+		}
 
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
-
-		if ( array_key_exists( $table, $cache ) ) {
-			return $cache[ $table ];
-		}
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$col_type = $wpdb->get_var(
@@ -83,7 +103,8 @@ class Repository {
 			$dims = (int) $m[1];
 		}
 
-		$cache[ $table ] = $dims;
+		$this->dims_cached = true;
+		$this->dims_cache  = $dims;
 		return $dims;
 	}
 
@@ -127,7 +148,7 @@ class Repository {
 			return;
 		}
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$del = $wpdb->query( $wpdb->prepare( "DELETE FROM `{$table}` WHERE post_id = %d", $post_id ) );
 		if ( false === $del ) {
 			wp_mariadb_vector_search_log(
@@ -137,7 +158,7 @@ class Repository {
 
 		foreach ( $chunks as $chunk ) {
 			$vec_literal = self::format_vector_literal( $chunk['vector'] );
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 			$ok = $wpdb->query(
 				$wpdb->prepare(
 					"INSERT INTO `{$table}`
@@ -153,7 +174,7 @@ class Repository {
 					$now
 				)
 			);
-			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 			if ( false === $ok ) {
 				wp_mariadb_vector_search_log(
 					sprintf(
@@ -177,7 +198,7 @@ class Repository {
 	public function delete_post( int $post_id ): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->query( $wpdb->prepare( "DELETE FROM `{$table}` WHERE post_id = %d", $post_id ) );
 	}
 
@@ -190,11 +211,11 @@ class Repository {
 	public function get_content_hash( int $post_id ): ?string {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$result = $wpdb->get_var(
 			$wpdb->prepare( "SELECT content_hash FROM `{$table}` WHERE post_id = %d LIMIT 1", $post_id )
 		);
-		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		return is_string( $result ) ? $result : null;
 	}
 
@@ -210,7 +231,7 @@ class Repository {
 	public function count_indexed(): int {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mariadb_vector_embeddings';
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		return (int) $wpdb->get_var( "SELECT COUNT(DISTINCT post_id) FROM `{$table}`" );
 	}
 
@@ -244,7 +265,7 @@ class Repository {
 		$inner_limit = $max_results * $overscan;
 		$type_list   = implode( ',', array_map( static fn( $t ) => "'" . esc_sql( $t ) . "'", $post_types ) );
 
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT post_id, VEC_DISTANCE_COSINE(embedding, VEC_FromText(%s)) AS d
@@ -256,7 +277,7 @@ class Repository {
 				$inner_limit
 			)
 		);
-		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( empty( $rows ) ) {
 			return array();

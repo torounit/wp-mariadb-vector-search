@@ -13,6 +13,7 @@ export interface AvailableModel {
 	provider: string;
 	model: string;
 	label: string;
+	dimensions: number | null;
 }
 
 export interface StatusResponse {
@@ -26,9 +27,8 @@ export interface StatusResponse {
 	dim_changed: boolean;
 }
 
-export interface SaveModelResponse {
-	dimensions: number;
-	need_rebuild: boolean;
+export interface SettingsApiResponse {
+	wp_mariadb_vector_search_settings: Settings;
 }
 
 export interface ReindexResponse {
