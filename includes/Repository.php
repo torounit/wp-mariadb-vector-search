@@ -242,13 +242,16 @@ class Repository {
 	 * (ORDER BY distance LIMIT overscan), then PHP aggregates per post and
 	 * applies the distance threshold filter.
 	 *
-	 * @param float[]  $query_vector Embedding of the search query.
-	 * @param string[] $post_types   Post types to include.
-	 * @param float    $max_distance Maximum cosine distance to include (0=identical, ~1=unrelated).
-	 *                               Default INF means no threshold filtering.
-	 * @param int      $max_results  Safety cap on the number of posts returned and the basis for
-	 *                               the inner LIMIT (ensures the VECTOR INDEX is used). Default 200.
-	 * @param int      $overscan     Inner LIMIT multiplier (default 5).
+	 * @param float[]  $query_vector          Embedding of the search query.
+	 * @param string[] $post_types            Post types to include.
+	 * @param float    $max_distance          Maximum cosine distance to include (0=identical, ~1=unrelated).
+	 *                                        Default INF means no threshold filtering.
+	 * @param int      $max_results           Safety cap on the number of posts returned and the basis for
+	 *                                        the inner LIMIT (ensures the VECTOR INDEX is used). Default 200.
+	 * @param float    $max_relative_distance Maximum allowed distance gap from the best match (smallest
+	 *                                        distance in the result set). Posts further behind the best
+	 *                                        match than this are excluded. Default INF means no filtering.
+	 * @param int      $overscan              Inner LIMIT multiplier (default 5).
 	 * @return int[]  Post IDs ordered by ascending cosine distance.
 	 */
 	public function search_similar(
@@ -256,6 +259,7 @@ class Repository {
 		array $post_types,
 		float $max_distance = INF,
 		int $max_results = 200,
+		float $max_relative_distance = INF,
 		int $overscan = 5
 	): array {
 		global $wpdb;
@@ -300,6 +304,15 @@ class Repository {
 			$min_by_post = array_filter(
 				$min_by_post,
 				static fn( float $d ): bool => $d <= $max_distance
+			);
+		}
+
+		// Apply relative threshold: exclude posts that fall far behind the best match.
+		if ( is_finite( $max_relative_distance ) && ! empty( $min_by_post ) ) {
+			$best_d      = reset( $min_by_post );
+			$min_by_post = array_filter(
+				$min_by_post,
+				static fn( float $d ): bool => ( $d - $best_d ) <= $max_relative_distance
 			);
 		}
 

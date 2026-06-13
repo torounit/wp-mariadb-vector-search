@@ -143,8 +143,10 @@ LIMIT  %d;
 ```
 
 The default `overscan` of 5 covers typical content. `max_distance` (default
-0.65) excludes posts that are too dissimilar; `max_results` (default 200) caps
-the result set and ensures the VECTOR INDEX is engaged.
+0.65) excludes posts that are too dissimilar; `max_relative_distance` (default
+0.25) excludes posts whose distance is too far behind the best match in the
+result set; `max_results` (default 200) caps the result set and ensures the
+VECTOR INDEX is engaged.
 
 ## Chunking
 
@@ -174,6 +176,7 @@ Other options:
 
 - `wp_mariadb_vector_search_post_types` (`string[]`) — override indexed post types.
 - `wp_mariadb_vector_search_max_distance` (`float`, default `0.65`) — maximum cosine distance to include in results. `0` = identical, smaller = more similar. Optimal value is model-dependent.
+- `wp_mariadb_vector_search_max_relative_distance` (`float`, default `0.25`) — maximum allowed distance gap from the best (smallest-distance) match in the result set. Posts that fall further behind the best match than this are excluded, which suppresses generic/boilerplate content (e.g. the default "Hello world!" post) that passes `max_distance` but is clearly less relevant than the top results. Set to `INF` to disable. Optimal value is model-dependent.
 - `wp_mariadb_vector_search_max_results` (`int`, default `200`) — safety cap on returned posts; also the basis for the inner `LIMIT` so the VECTOR INDEX is used.
 - `wp_mariadb_vector_search_embedding_timeout` (`float`, default `60.0`) — HTTP timeout in seconds for embedding API requests. Increase for local models (e.g. LM Studio).
 - `wp_mariadb_vector_search_known_embedding_models` (`array`) — extend or replace the built-in list of known embedding models shown in the model selector.

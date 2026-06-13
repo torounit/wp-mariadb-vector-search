@@ -19,7 +19,9 @@ namespace WP_MariaDB_Vector_Search;
  *
  * On embedding or similarity search failure the query falls through to default WP search.
  * Results are filtered by cosine distance threshold (wp_mariadb_vector_search_max_distance,
- * default 0.65) — posts that are too dissimilar to the query are excluded.
+ * default 0.65) and by relative distance from the best match
+ * (wp_mariadb_vector_search_max_relative_distance, default 0.25) — posts that are too
+ * dissimilar to the query, or too far behind the best match, are excluded.
  */
 class Search {
 
@@ -68,7 +70,8 @@ class Search {
 
 		$max_distance = (float) apply_filters( 'wp_mariadb_vector_search_max_distance', 0.65 );
 		$max_results  = (int) apply_filters( 'wp_mariadb_vector_search_max_results', 200 );
-		$vector_ids   = $this->repository->search_similar( $result[0], $post_types, $max_distance, $max_results );
+		$max_relative = (float) apply_filters( 'wp_mariadb_vector_search_max_relative_distance', 0.25 );
+		$vector_ids   = $this->repository->search_similar( $result[0], $post_types, $max_distance, $max_results, $max_relative );
 
 		$ids = $vector_ids;
 
