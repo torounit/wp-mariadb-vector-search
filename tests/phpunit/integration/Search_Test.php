@@ -102,6 +102,27 @@ class Search_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Build a stub Embedding_Client that returns a vector orthogonal to the
+	 * default stub vector (1,0,0,0). Used so a post is indexed but never
+	 * surfaced by vector similarity search.
+	 *
+	 * @return Embedding_Client
+	 */
+	private function make_orthogonal_stub_client(): Embedding_Client {
+		return new class() extends Embedding_Client {
+			/**
+			 * Return fixed 4-dimensional vectors orthogonal to (1,0,0,0).
+			 *
+			 * @param string[] $texts Texts to embed.
+			 * @return float[][]|\WP_Error
+			 */
+			public function embed( array $texts ): array|\WP_Error {
+				return array_map( static fn() => array( 0.0, 0.0, 0.0, 1.0 ), $texts );
+			}
+		};
+	}
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function set_up(): void {
@@ -289,6 +310,70 @@ class Search_Test extends \WP_UnitTestCase {
 		$this->restore_main_query();
 
 		$this->assertSame( 'cats', $query->get( 's' ) );
+	}
+
+	/** A post that matches only lexically (LIKE) is included via hybrid search. */
+	public function test_hybrid_includes_lexical_only_match(): void {
+		// Indexed with a vector orthogonal to the query vector, so vector
+		// search alone would never surface this post.
+		$indexer = new Indexer( $this->make_orthogonal_stub_client(), $this->repository );
+		$post_c  = $this->factory->post->create(
+			array(
+				'post_title'   => 'Zorbex Gadget Guide',
+				'post_content' => 'Everything about the Zorbex gadget line.',
+				'post_status'  => 'publish',
+			)
+		);
+		$indexer->index_post( $post_c );
+
+		$query = new \WP_Query(
+			array(
+				's'              => 'Zorbex',
+				'post_type'      => 'post',
+				'posts_per_page' => 10,
+				'fields'         => 'ids',
+			)
+		);
+
+		$this->as_main_query( $query );
+		$query->get_posts();
+		$this->restore_main_query();
+
+		$found_ids = array_map( 'intval', $query->posts );
+		$this->assertContains( $post_c, $found_ids );
+	}
+
+	/** Disabling the hybrid filter falls back to vector-only results. */
+	public function test_hybrid_filter_false_excludes_lexical_only_match(): void {
+		$indexer = new Indexer( $this->make_orthogonal_stub_client(), $this->repository );
+		$post_c  = $this->factory->post->create(
+			array(
+				'post_title'   => 'Zorbex Gadget Guide',
+				'post_content' => 'Everything about the Zorbex gadget line.',
+				'post_status'  => 'publish',
+			)
+		);
+		$indexer->index_post( $post_c );
+
+		add_filter( 'wp_mariadb_vector_search_hybrid', '__return_false' );
+
+		$query = new \WP_Query(
+			array(
+				's'              => 'Zorbex',
+				'post_type'      => 'post',
+				'posts_per_page' => 10,
+				'fields'         => 'ids',
+			)
+		);
+
+		$this->as_main_query( $query );
+		$query->get_posts();
+		$this->restore_main_query();
+
+		remove_filter( 'wp_mariadb_vector_search_hybrid', '__return_false' );
+
+		$found_ids = array_map( 'intval', $query->posts );
+		$this->assertNotContains( $post_c, $found_ids );
 	}
 
 	/** A non-search query is not modified by the Search class. */

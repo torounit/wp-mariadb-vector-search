@@ -43,7 +43,11 @@ save_post ──► Indexer::enqueue (wp_schedule_single_event)
 is_search() ──► Search::pre_get_posts
                 │  query string → Embedding_Client::embed (1 chunk)
                 ▼
-        Repository::search_similar(query_vec, post_types, max_distance, max_results) → post__in (ordered)
+        Repository::search_similar(query_vec, post_types, max_distance, max_results) ─┐
+                                                                                        │
+        WP_Query (LIKE, relevance) ────────────────────────────────────────────────────┤
+                                                                                        ▼
+                                                                          Rank_Fusion::fuse (RRF) → post__in (ordered)
 ```
 
 ### Design decisions
@@ -64,6 +68,13 @@ is_search() ──► Search::pre_get_posts
 - **Search override is opt-out-safe.** Filter `pre_get_posts` only when
   `is_main_query() && is_search() && s != ''`. On embedding error fall through
   to default WordPress search rather than returning nothing.
+- **Hybrid by default.** Vector results and WordPress's default LIKE search
+  results (via a sub `WP_Query`, `orderby=relevance`) are merged with
+  Reciprocal Rank Fusion (`Rank_Fusion::fuse()`). This catches lexical-only
+  matches (e.g. product codes, names) that embeddings rank poorly. The
+  `max_distance` filter still applies to the vector side, so unrelated
+  generic content is not reintroduced via the union. Opt out with
+  `wp_mariadb_vector_search_hybrid`.
 
 ## Schema
 
@@ -106,7 +117,8 @@ to skip work when the post body has not changed.
 | `includes/Content_Hash.php`       | SHA-256 hash of post title + content.                                                              |
 | `includes/Chunker.php`            | Block strip + paragraph/sentence/char splitting with overlap. Title prepended to each chunk.       |
 | `includes/Indexer.php`            | `save_post`/`delete_post`/`trashed_post` hooks. Cron worker that calls embedding client and repository. |
-| `includes/Search.php`             | `pre_get_posts` rewrite to `post__in` + `orderby=post__in`. Safe fallback to default search.       |
+| `includes/Search.php`             | `pre_get_posts` rewrite to `post__in` + `orderby=post__in`. Hybrid-fuses vector and LIKE results via `Rank_Fusion`. Safe fallback to default search. |
+| `includes/Rank_Fusion.php`        | Pure RRF (Reciprocal Rank Fusion) of ranked ID lists. WordPress-independent.                       |
 | `includes/CLI.php`                | `wp mariadb-vector reindex [--post-type=] [--force] [--batch=]`. Loaded only if `WP_CLI`.          |
 | `includes/Cron_Backfill.php`      | Batched cron-driven reindex of all posts. Progress in transient.                                   |
 | `includes/Admin.php`              | Tools page: status, model selector, unified Reindex button (auto-detects dimension diff).          |
@@ -165,6 +177,9 @@ Other options:
 - `wp_mariadb_vector_search_max_results` (`int`, default `200`) — safety cap on returned posts; also the basis for the inner `LIMIT` so the VECTOR INDEX is used.
 - `wp_mariadb_vector_search_embedding_timeout` (`float`, default `60.0`) — HTTP timeout in seconds for embedding API requests. Increase for local models (e.g. LM Studio).
 - `wp_mariadb_vector_search_known_embedding_models` (`array`) — extend or replace the built-in list of known embedding models shown in the model selector.
+- `wp_mariadb_vector_search_hybrid` (`bool`, default `true`) — fuse vector similarity results with WordPress's default LIKE search results via RRF. Set to `false` to fall back to vector-only results.
+- `wp_mariadb_vector_search_rrf_k` (`int`, default `60`) — Reciprocal Rank Fusion constant used when combining vector and LIKE result lists. Higher values flatten the influence of top ranks.
+- `wp_mariadb_vector_search_like_results` (`int`, default = `wp_mariadb_vector_search_max_results`) — number of results to fetch from the LIKE-based sub-query before fusion.
 
 ## `$wpdb` notes
 

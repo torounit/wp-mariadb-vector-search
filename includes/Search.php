@@ -68,7 +68,16 @@ class Search {
 
 		$max_distance = (float) apply_filters( 'wp_mariadb_vector_search_max_distance', 0.65 );
 		$max_results  = (int) apply_filters( 'wp_mariadb_vector_search_max_results', 200 );
-		$ids          = $this->repository->search_similar( $result[0], $post_types, $max_distance, $max_results );
+		$vector_ids   = $this->repository->search_similar( $result[0], $post_types, $max_distance, $max_results );
+
+		$ids = $vector_ids;
+
+		if ( apply_filters( 'wp_mariadb_vector_search_hybrid', true ) ) {
+			$like_limit = (int) apply_filters( 'wp_mariadb_vector_search_like_results', $max_results );
+			$like_ids   = $this->get_like_results( $search_term, $post_types, $like_limit );
+			$rrf_k      = (int) apply_filters( 'wp_mariadb_vector_search_rrf_k', 60 );
+			$ids        = Rank_Fusion::fuse( array( $vector_ids, $like_ids ), $rrf_k );
+		}
 
 		if ( empty( $ids ) ) {
 			return;
@@ -92,6 +101,32 @@ class Search {
 		remove_filter( 'posts_search', '__return_empty_string', 99 );
 		remove_action( 'the_posts', array( $this, 'remove_search_override' ) );
 		return $posts;
+	}
+
+	/**
+	 * Run WordPress's default LIKE-based search and return matching post IDs.
+	 *
+	 * The resulting WP_Query is not the main query, so this does not
+	 * re-trigger {@see rewrite_search_query()}.
+	 *
+	 * @param string   $search_term Raw search term.
+	 * @param string[] $post_types  Post types to include.
+	 * @param int      $limit       Maximum number of results.
+	 * @return int[] Post IDs ordered by WordPress's default search relevance.
+	 */
+	private function get_like_results( string $search_term, array $post_types, int $limit ): array {
+		$like_query = new \WP_Query(
+			array(
+				's'              => $search_term,
+				'post_type'      => $post_types,
+				'posts_per_page' => $limit,
+				'fields'         => 'ids',
+				'orderby'        => 'relevance',
+				'no_found_rows'  => true,
+			)
+		);
+
+		return array_map( 'intval', $like_query->posts );
 	}
 
 	/**
