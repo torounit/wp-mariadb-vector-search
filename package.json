@@ -17,7 +17,7 @@
 		"start:js": "node tools/ensure-boot-asset.cjs && wp-build --watch",
 		"build": "npm run build:js",
 		"start": "npm run start:js",
-		"test:php": "npm-run-all test:php:setup test:php:base test:php:teardown",
+		"test:php": "npm-run-all --continue-on-error test:php:setup test:php:base test:php:teardown",
 		"test:php:setup": "wp-env --config=.wp-env.test.json start",
 		"test:php:base": "wp-env --config=.wp-env.test.json run --env-cwd='wp-content/plugins/wp-mariadb-vector-search' wordpress vendor/bin/phpunit -c phpunit.xml.dist",
 		"test:php:teardown": "wp-env --config=.wp-env.test.json stop"

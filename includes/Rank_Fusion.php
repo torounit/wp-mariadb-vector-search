@@ -43,6 +43,10 @@ class Rank_Fusion {
 	 * @return array<int, float> Map of post ID to fused score.
 	 */
 	public static function scores( array $ranked_lists, int $k = 60 ): array {
+		if ( $k < 0 ) {
+			$k = 0;
+		}
+
 		$scores = array();
 
 		foreach ( $ranked_lists as $list ) {

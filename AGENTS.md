@@ -43,11 +43,11 @@ save_post ──► Indexer::enqueue (wp_schedule_single_event)
 is_search() ──► Search::pre_get_posts
                 │  query string → Embedding_Client::embed (1 chunk)
                 ▼
-        Repository::search_similar(query_vec, post_types, max_distance, max_results) ─┐
-                                                                                        │
-        WP_Query (LIKE, relevance) ────────────────────────────────────────────────────┤
-                                                                                        ▼
-                                                                          Rank_Fusion::fuse (RRF) → post__in (ordered)
+        Repository::search_similar(query_vec, post_types, max_distance, max_relative_distance, max_results) ─┐
+                                                                                                                │
+        WP_Query (LIKE, relevance) ────────────────────────────────────────────────────────────────────────────┤
+                                                                                                                ▼
+                                                                                                  Rank_Fusion::fuse (RRF) → post__in (ordered)
 ```
 
 ### Design decisions

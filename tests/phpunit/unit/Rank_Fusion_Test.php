@@ -69,4 +69,16 @@ class Rank_Fusion_Test extends \WP_UnitTestCase {
 		$result = Rank_Fusion::fuse( array( array( '1', '2' ) ) );
 		$this->assertSame( array( 1, 2 ), $result );
 	}
+
+	/** A negative k (e.g. via the rrf_k filter) does not cause division by zero. */
+	public function test_negative_k_does_not_divide_by_zero(): void {
+		$scores = Rank_Fusion::scores( array( array( 1, 2 ) ), -1 );
+		$this->assertSame( array( 1, 2 ), array_keys( $scores ) );
+	}
+
+	/** A very negative k is also clamped safely. */
+	public function test_very_negative_k_does_not_divide_by_zero(): void {
+		$result = Rank_Fusion::fuse( array( array( 1, 2 ) ), -100 );
+		$this->assertSame( array( 1, 2 ), $result );
+	}
 }
