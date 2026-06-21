@@ -83,7 +83,10 @@ class Search {
 		}
 
 		if ( empty( $ids ) ) {
-			return;
+			// No matches from vector (and, if enabled, fused LIKE) search.
+			// Use a non-existent post ID rather than returning early, so the
+			// query does not fall through to WordPress's default LIKE search.
+			$ids = array( 0 );
 		}
 
 		$query->set( 'post__in', $ids );

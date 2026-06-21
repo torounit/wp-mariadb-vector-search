@@ -376,6 +376,39 @@ class Search_Test extends \WP_UnitTestCase {
 		$this->assertNotContains( $post_c, $found_ids );
 	}
 
+	/**
+	 * With hybrid disabled, zero vector results must not fall back to the
+	 * default LIKE search (vector-only contract).
+	 */
+	public function test_hybrid_filter_false_with_zero_vector_results_returns_nothing(): void {
+		// Query embedding orthogonal to every indexed post, so vector search
+		// returns zero results while the term still matches lexically.
+		$search = new Search( $this->make_orthogonal_stub_client(), $this->repository );
+		$search->register_hooks();
+
+		add_filter( 'wp_mariadb_vector_search_hybrid', '__return_false' );
+
+		$query = new \WP_Query(
+			array(
+				's'              => 'cats',
+				'post_type'      => 'post',
+				'posts_per_page' => 10,
+				'fields'         => 'ids',
+			)
+		);
+
+		$this->as_main_query( $query );
+		$query->get_posts();
+		$this->restore_main_query();
+
+		remove_filter( 'wp_mariadb_vector_search_hybrid', '__return_false' );
+		remove_all_filters( 'pre_get_posts' );
+		remove_all_filters( 'posts_search' );
+		remove_all_actions( 'the_posts' );
+
+		$this->assertSame( array(), array_map( 'intval', $query->posts ) );
+	}
+
 	/** A non-search query is not modified by the Search class. */
 	public function test_non_search_query_is_not_modified(): void {
 		$query = new \WP_Query(
