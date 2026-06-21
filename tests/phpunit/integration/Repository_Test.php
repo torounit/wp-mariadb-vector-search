@@ -361,4 +361,53 @@ class Repository_Test extends \WP_UnitTestCase {
 
 		$this->assertSame( array( 1 ), $ids );
 	}
+
+	/** A post far behind the best match is excluded by the relative distance threshold. */
+	public function test_search_similar_filters_by_max_relative_distance(): void {
+		// Post 1: identical to query vector (distance = 0, the best match).
+		$this->repository->replace_post_chunks(
+			1,
+			'post',
+			'h1',
+			array(
+				array(
+					'chunk_index' => 0,
+					'chunk_text'  => 'A',
+					'vector'      => array( 1.0, 0.0, 0.0, 0.0 ),
+				),
+			)
+		);
+		// Post 2: cosine distance ≈ 0.2 from the query (gap 0.2 from the best match).
+		$this->repository->replace_post_chunks(
+			2,
+			'post',
+			'h2',
+			array(
+				array(
+					'chunk_index' => 0,
+					'chunk_text'  => 'B',
+					'vector'      => array( 0.8, 0.6, 0.0, 0.0 ),
+				),
+			)
+		);
+		// Post 3: cosine distance ≈ 0.5 from the query (gap 0.5 from the best match).
+		$this->repository->replace_post_chunks(
+			3,
+			'post',
+			'h3',
+			array(
+				array(
+					'chunk_index' => 0,
+					'chunk_text'  => 'C',
+					'vector'      => array( 0.5, 0.8660254038, 0.0, 0.0 ),
+				),
+			)
+		);
+
+		// max_distance left at INF; only the relative threshold (0.3) applies.
+		$ids = $this->repository->search_similar( array( 1.0, 0.0, 0.0, 0.0 ), array( 'post' ), INF, 200, 0.3 );
+
+		sort( $ids );
+		$this->assertSame( array( 1, 2 ), $ids );
+	}
 }

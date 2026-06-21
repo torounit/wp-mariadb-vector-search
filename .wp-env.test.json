@@ -2,13 +2,13 @@
 	"$schema": "https://schemas.wp.org/trunk/wp-env.json",
 	"core": null,
 	"testsEnvironment": false,
+	"autoPort": true,
 	"plugins": [
 		".",
 		"https://downloads.wordpress.org/plugin/ai-provider-for-google.zip",
 		"https://downloads.wordpress.org/plugin/ai-provider-for-openai.zip",
 		"torounit/ai-provider-for-lm-studio"
 	],
-	"port": 8889,
 	"config": {
 		"WP_DEBUG": true
 	},

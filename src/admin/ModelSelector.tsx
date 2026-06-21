@@ -55,6 +55,16 @@ export function ModelSelector( {
 			: `[${ m.provider }] ${ m.label }`,
 	} ) );
 
+	// Without a placeholder, a <select> with value="" displays the first
+	// option by default, making it look selected even though `selected`
+	// is still "" — which keeps the Save button disabled.
+	if ( currentValue === '' ) {
+		options.unshift( {
+			value: '',
+			label: __( 'Select a model…', 'wp-mariadb-vector-search' ),
+		} );
+	}
+
 	// Resolve the currently selected model's known dimensions for preview.
 	const selectedColon = selected.indexOf( ':' );
 	const selectedProvider =
